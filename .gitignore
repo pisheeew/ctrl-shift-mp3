@@ -1,0 +1,35 @@
+# --- Local user data (never commit) ---
+# This app stores config, session, and cache files in the user's home
+# directory (not this repo folder), but these patterns are here as a
+# safety net in case any of those files ever end up copied in.
+.playlist_downloader_config.json
+.playlist_downloader_session.json
+.playlist_downloader_match_cache.json
+.playlist_downloader.log
+*.log
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+
+# --- Editor / OS cruft ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Downloaded output (in case someone points OUTPUT_DIR inside the repo) ---
+*.mp3
+*.m4a
+*.webm
