@@ -14,9 +14,12 @@ or:
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 import engine
 from engine import Track
+import main
+import server
 from run_orchestration import RunOrchestrator
 
 
@@ -236,6 +239,54 @@ class TestProviderAndRunSeams(unittest.TestCase):
         track = Track(index=1, title="Test song", artist="Test artist")
         matches = providers.youtube.find_matches(track)
         self.assertEqual(matches[0][0]["id"], "test-video")
+
+
+class TestPackagedStartup(unittest.TestCase):
+    def test_resource_dir_prefers_frozen_bundle_location(self):
+        with mock.patch.object(server.sys, "_MEIPASS", r"C:\bundle", create=True):
+            self.assertEqual(server.resource_dir(), os.path.join(r"C:\bundle"))
+
+    def test_app_serves_frontend_from_injected_resource_directory(self):
+        with tempfile.TemporaryDirectory() as frontend_dir:
+            with open(os.path.join(frontend_dir, "index.html"), "w", encoding="utf-8") as page:
+                page.write("packaged frontend")
+            response = server.create_app(frontend_dir=frontend_dir).test_client().get("/")
+            body = response.get_data(as_text=True)
+
+            response.close()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body, "packaged frontend")
+
+    def test_select_port_uses_preferred_when_available(self):
+        with mock.patch.object(main, "port_is_available", return_value=True):
+            self.assertEqual(main.select_port(8743), 8743)
+
+    def test_select_port_falls_back_to_ephemeral_port(self):
+        with mock.patch.object(main, "port_is_available", return_value=False):
+            selected = main.select_port(8743)
+        self.assertGreater(selected, 0)
+
+    def test_browser_failure_is_logged_and_does_not_raise(self):
+        with mock.patch.object(main.webbrowser, "open", side_effect=OSError("no browser")):
+            with mock.patch.object(main.log, "warning") as warning:
+                main.open_browser("http://127.0.0.1:8743/")
+        warning.assert_called_once()
+
+
+class TestFfmpegResolution(unittest.TestCase):
+    def test_prefers_bundled_ffmpeg_directory(self):
+        with tempfile.TemporaryDirectory() as bundle:
+            open(os.path.join(bundle, "ffmpeg.exe"), "w").close()
+            open(os.path.join(bundle, "ffprobe.exe"), "w").close()
+            self.assertEqual(engine.resolve_ffmpeg_location(bundle, lambda _: None), bundle)
+
+    def test_falls_back_to_path(self):
+        which = lambda name: os.path.join(r"C:\tools", name)
+        self.assertEqual(engine.resolve_ffmpeg_location(r"C:\missing", which), r"C:\tools")
+
+    def test_reports_missing_ffmpeg_tools(self):
+        with self.assertRaisesRegex(RuntimeError, "ffmpeg and ffprobe"):
+            engine.resolve_ffmpeg_location(r"C:\missing", lambda _: None)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ import logging
 import os
 import queue
 import random
+import sys
 import threading
 import time
 from logging.handlers import RotatingFileHandler
@@ -61,8 +62,14 @@ DEFAULT_CONFIG = {
     "concurrent_downloads": 3,
 }
 
-FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
 PORT = 8743
+
+
+def resource_dir() -> str:
+    """Return the directory containing application resources."""
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    return bundle_dir or os.path.dirname(os.path.abspath(__file__))
+
 
 # SEC-005: placeholder shown in place of the real secret once one is saved,
 # so the plaintext value is never re-sent to the browser on page load / the
@@ -74,9 +81,6 @@ SECRET_MASK = "••••••••"
 # same-origin browser navigation to "/" doesn't send an Origin header on
 # simple GETs, but fetch()/XHR calls (same- or cross-origin) do -- so any
 # request that *has* an Origin header must match this exactly.
-ALLOWED_ORIGIN = f"http://127.0.0.1:{PORT}"
-
-
 def _setup_logging() -> logging.Logger:
     logger = logging.getLogger("playlist_downloader")
     logger.setLevel(logging.INFO)
@@ -864,8 +868,9 @@ class Core:
 # --------------------------------------------------------------------------- #
 # Flask app
 # --------------------------------------------------------------------------- #
-def create_app() -> Flask:
-    app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
+def create_app(frontend_dir: Optional[str] = None, port: int = PORT) -> Flask:
+    frontend_dir = frontend_dir or os.path.join(resource_dir(), "frontend")
+    app = Flask(__name__, static_folder=frontend_dir, static_url_path="")
     core = Core()
 
     @app.before_request
@@ -878,7 +883,8 @@ def create_app() -> Flask:
         # to localhost" drive-by pattern without breaking normal use of the
         # app in a browser.
         origin = request.headers.get("Origin")
-        if origin is not None and origin != ALLOWED_ORIGIN:
+        allowed_origin = f"http://127.0.0.1:{port}"
+        if origin is not None and origin != allowed_origin:
             abort(403)
 
     @app.after_request
@@ -900,7 +906,7 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        return send_from_directory(FRONTEND_DIR, "index.html")
+        return send_from_directory(frontend_dir, "index.html")
 
     @app.route("/api/events")
     def sse_events():

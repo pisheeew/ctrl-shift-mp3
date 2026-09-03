@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -516,6 +518,24 @@ def build_output_basename(track: Track, output_dir: str, filename_prefix: Option
 # Downloading
 # --------------------------------------------------------------------------- #
 
+def resolve_ffmpeg_location(bundle_dir: Optional[str] = None,
+                            which: Callable[[str], Optional[str]] = shutil.which) -> str:
+    """Find matching ffmpeg and ffprobe binaries for yt-dlp."""
+    if bundle_dir is None:
+        bundle_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    names = ("ffmpeg.exe", "ffprobe.exe") if os.name == "nt" else ("ffmpeg", "ffprobe")
+    bundled_dirs = (bundle_dir, os.path.join(bundle_dir, "ffmpeg"))
+    for directory in bundled_dirs:
+        if all(os.path.isfile(os.path.join(directory, name)) for name in names):
+            return directory
+
+    path_entries = [which(name) for name in names]
+    if all(path_entries):
+        directories = {os.path.dirname(path) for path in path_entries}
+        if len(directories) == 1:
+            return directories.pop()
+    raise RuntimeError("FFmpeg is required: ffmpeg and ffprobe were not found in the app bundle or PATH")
+
 def download_track(track: Track, output_dir: str, quality_kbps: str = "192",
                     progress_cb: Optional[Callable[[dict], None]] = None,
                     filename_prefix: Optional[str] = None,
@@ -559,6 +579,7 @@ def download_track(track: Track, output_dir: str, quality_kbps: str = "192",
         # these -metadata flags in the wrong position in their ffmpeg
         # command lines and break postprocessing outright.
         "postprocessor_args": {"Metadata": []},
+        "ffmpeg_location": resolve_ffmpeg_location(),
     }
     if track.artist:
         ydl_opts["postprocessor_args"]["Metadata"] = [

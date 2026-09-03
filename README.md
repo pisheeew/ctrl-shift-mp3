@@ -55,8 +55,10 @@ Install the Python dependencies:
 python -m pip install -r requirements.txt
 ```
 
-Install `ffmpeg` separately and make sure it is available on your system
-`PATH`. It is needed for audio conversion and cover-art embedding.
+Install `ffmpeg` separately and make sure both `ffmpeg` and `ffprobe` are
+available on your system `PATH`. A packaged release checks its bundled
+executables first, then falls back to `PATH`. They are needed for audio
+conversion and cover-art embedding.
 
 ### 2. Start the app
 
@@ -64,9 +66,11 @@ Install `ffmpeg` separately and make sure it is available on your system
 python main.py
 ```
 
-The app starts at <http://127.0.0.1:8743/> and attempts to open your default
-browser. Keep the terminal running while you use the app. Close the server
-with `Ctrl+C`; closing the browser tab does not stop it.
+The app tries <http://127.0.0.1:8743/> first and selects another available
+localhost port if needed. It prints the actual URL and attempts to open your
+default browser. Keep the process running while you use the app. Close the
+server with `Ctrl+C`; closing the browser tab does not stop it. Use
+`python main.py --debug` for Flask diagnostic output.
 
 ### 3. Scan and download
 
@@ -113,8 +117,10 @@ credentials file with `chmod 600 ~/.playlist_downloader_config.json`.
 
 ### `ffmpeg` is not found
 
-Install `ffmpeg`, add its executable directory to `PATH`, then restart the
-terminal before running the app again.
+Install both `ffmpeg` and `ffprobe`, add their executable directory to `PATH`,
+then restart the terminal before running the app again. Packaged releases
+also accept matching bundled executables; if neither source contains both
+tools, the startup error identifies the missing requirement.
 
 ### The browser does not open
 
