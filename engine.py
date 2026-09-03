@@ -226,6 +226,34 @@ def get_youtube_playlist_tracks(url: str) -> tuple[str, list[Track]]:
 PREFERRED_CHANNEL_HINTS = ("- topic", "official", "vevo")
 
 
+class SpotifyAdapter:
+    """Provider adapter for Spotify playlist metadata."""
+
+    def get_tracks(self, url: str, client_id: str, client_secret: str) -> tuple[str, list[Track]]:
+        return SpotifyLister(client_id, client_secret).get_tracks(url)
+
+
+class YouTubeAdapter:
+    """Provider adapter for YouTube listing, matching, and downloads."""
+
+    def get_tracks(self, url: str) -> tuple[str, list[Track]]:
+        return get_youtube_playlist_tracks(url)
+
+    def find_matches(self, track: Track, ydl: Optional[yt_dlp.YoutubeDL] = None):
+        return find_best_youtube_match(track, ydl=ydl)
+
+    def download(self, track: Track, output_dir: str, **kwargs) -> None:
+        download_track(track, output_dir, **kwargs)
+
+
+class MediaProviders:
+    """Concrete provider set used by the run orchestration module."""
+
+    def __init__(self, spotify=None, youtube=None):
+        self.spotify = spotify or SpotifyAdapter()
+        self.youtube = youtube or YouTubeAdapter()
+
+
 def build_search_ydl() -> yt_dlp.YoutubeDL:
     """
     A single reusable YoutubeDL instance for searches within one scan batch.

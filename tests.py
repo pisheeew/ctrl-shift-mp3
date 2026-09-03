@@ -17,6 +17,7 @@ import unittest
 
 import engine
 from engine import Track
+from run_orchestration import RunOrchestrator
 
 
 class TestClassifyLink(unittest.TestCase):
@@ -212,6 +213,29 @@ class TestTrackJsonRoundTrip(unittest.TestCase):
         self.assertEqual(restored[0].title, "Song A")
         self.assertEqual(restored[0].fallback_urls, ["https://youtu.be/1", "https://youtu.be/2"])
         self.assertEqual(restored[0].also_in, ["Playlist B"])
+
+
+class TestProviderAndRunSeams(unittest.TestCase):
+    def test_run_orchestrator_launches_and_resets_stop_signal(self):
+        orchestrator = RunOrchestrator()
+        completed = []
+        thread = orchestrator.launch(lambda: completed.append(True), name="test-run")
+        thread.join(timeout=1)
+        self.assertEqual(completed, [True])
+        orchestrator.stop()
+        self.assertTrue(orchestrator.stop_requested.is_set())
+        orchestrator.reset()
+        self.assertFalse(orchestrator.stop_requested.is_set())
+
+    def test_youtube_adapter_is_injectable(self):
+        class FakeYouTube:
+            def find_matches(self, track, ydl=None):
+                return [({"id": "test-video"}, 99.0)]
+
+        providers = engine.MediaProviders(youtube=FakeYouTube())
+        track = Track(index=1, title="Test song", artist="Test artist")
+        matches = providers.youtube.find_matches(track)
+        self.assertEqual(matches[0][0]["id"], "test-video")
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
 import engine
 from engine import Track
+from run_orchestration import RunOrchestrator
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".playlist_downloader_config.json")
 CACHE_PATH = os.path.join(os.path.expanduser("~"), ".playlist_downloader_session.json")
@@ -239,13 +240,15 @@ class Core:
     and pywebview versions had. Push updates go out via broadcast() instead
     of a Tk queue or window.evaluate_js."""
 
-    def __init__(self):
+    def __init__(self, providers=None):
         self.config_data = load_config()
         self.tracks: list[Track] = []
         self.queue_urls: list[str] = []
-        self.stop_requested = threading.Event()
+        self.orchestrator = RunOrchestrator()
+        self.stop_requested = self.orchestrator.stop_requested
         self.busy = False
         self.match_cache: dict = engine.load_match_cache(MATCH_CACHE_PATH)
+        self.providers = providers or engine.MediaProviders()
 
         cached_tracks, cached_queue = load_session_cache()
         self.tracks = cached_tracks
@@ -328,13 +331,13 @@ class Core:
         broadcast("clear_tracks")
         self._set_busy(True)
         broadcast("status", "Scanning...")
-        threading.Thread(target=self._scan_worker, args=(url, link_type), daemon=True).start()
+        self.orchestrator.launch(self._scan_worker, url, link_type, name="playlist-scan")
         return {"ok": True}
 
     def _scan_worker(self, url: str, link_type: str):
         try:
             if link_type == "youtube":
-                _name, tracks = engine.get_youtube_playlist_tracks(url)
+                _name, tracks = self.providers.youtube.get_tracks(url)
                 for t in tracks:
                     self._emit_track(t)
                 self.tracks = tracks
@@ -348,8 +351,7 @@ class Core:
                 broadcast("scan_done")
                 return
 
-            lister = engine.SpotifyLister(cid, secret)
-            _name, tracks = lister.get_tracks(url)
+            _name, tracks = self.providers.spotify.get_tracks(url, cid, secret)
             self.tracks = tracks
             for t in tracks:
                 self._emit_track(t)
@@ -414,7 +416,7 @@ class Core:
             return
 
         try:
-            candidates = engine.find_best_youtube_match(t, ydl=shared_ydl)
+            candidates = self.providers.youtube.find_matches(t, ydl=shared_ydl)
         except Exception as e:
             t.status, t.error = "Failed", str(e)
             log.warning("Match search failed for %r: %s", t.query_string, e)
@@ -469,7 +471,7 @@ class Core:
         self._set_busy(True)
         broadcast("progress", 0)
         broadcast("status", f"Scanning {len(self.queue_urls)} queued playlists...")
-        threading.Thread(target=self._scan_all_queued_worker, daemon=True).start()
+        self.orchestrator.launch(self._scan_all_queued_worker, name="playlist-merge-scan")
         return {"ok": True}
 
     def _scan_all_queued_worker(self):
@@ -503,13 +505,12 @@ class Core:
 
                 try:
                     if link_type == "youtube":
-                        name, tracks = engine.get_youtube_playlist_tracks(url)
+                        name, tracks = self.providers.youtube.get_tracks(url)
                     elif link_type == "spotify":
                         if not cid or not secret:
                             broadcast("error", f"Skipped (no Spotify keys in Settings): {url}")
                             continue
-                        lister = engine.SpotifyLister(cid, secret)
-                        name, tracks = lister.get_tracks(url)
+                        name, tracks = self.providers.spotify.get_tracks(url, cid, secret)
                         self._match_tracks_with_progress(
                             tracks, shared_ydl, threshold,
                             status_msg=lambda j, jtotal, t, name=name: f'[{i}/{total}] Matching "{name}": {j}/{jtotal}',
@@ -587,7 +588,7 @@ class Core:
         concurrency = min(self._concurrency(), len(matched))
         broadcast("slots_init", {"count": concurrency})
         broadcast("status", f"Starting download of {len(matched)} tracks ({concurrency} at a time)...")
-        threading.Thread(target=self._download_worker, args=(matched, output_dir), daemon=True).start()
+        self.orchestrator.launch(self._download_worker, matched, output_dir, name="playlist-download")
         return {"ok": True}
 
     def _concurrency(self) -> int:
@@ -689,7 +690,7 @@ class Core:
                     break
                 try:
                     t.youtube_url = candidate_url
-                    engine.download_track(
+                    self.providers.youtube.download(
                         t, output_dir, quality_kbps=quality, progress_cb=progress_cb,
                         filename_prefix=prefix, embed_cover_art=embed_cover_art,
                     )
@@ -759,8 +760,7 @@ class Core:
             broadcast("download_failures", [{"name": n, "reason": r} for n, r in failed_tracks])
 
     def stop(self) -> dict:
-        self.stop_requested.set()
-        broadcast("status", "Stopping after current track...")
+        self.orchestrator.stop()
         return {"ok": True}
 
     # ------------------------------------------------------------------ #
@@ -781,7 +781,7 @@ class Core:
         broadcast("progress", 0)
         broadcast("slots_init", {"count": min(self._concurrency(), len(failed))})
         broadcast("status", f"Retrying {len(failed)} failed track(s)...")
-        threading.Thread(target=self._retry_failed_worker, args=(failed, output_dir), daemon=True).start()
+        self.orchestrator.launch(self._retry_failed_worker, failed, output_dir, name="playlist-retry")
         return {"ok": True}
 
     def _retry_failed_worker(self, failed: list[Track], output_dir: str):

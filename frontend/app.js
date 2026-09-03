@@ -110,67 +110,31 @@ function setConnStatus(connected) {
   sseConnected = connected;
 }
 
-function handleBridgeEvent(msg) {
-  const { type, payload } = msg;
-  switch (type) {
-    case "track_update":
-      tracks[payload.index] = payload;
-      renderTrackRow(payload);
-      break;
-    case "clear_tracks":
-      tracks = {};
-      $("track-body").innerHTML = "";
-      break;
-    case "status":
-      $("status-text").textContent = payload;
-      logLine(payload);
-      break;
-    case "progress":
-      setAsciiBar("overall-progress", payload);
-      break;
-    case "slot_update":
-      setSlot(payload.slot, payload.current_file, payload.percent);
-      break;
-    case "slots_init":
-      setSlotCount(payload.count);
-      break;
-    case "busy":
-      setBusy(payload);
-      break;
-    case "error":
-      toast("error", payload);
-      break;
-    case "scan_done":
-      // OPT-001: previously a no-op. Scanning is over (whether it finished,
-      // was stopped, or errored) -- the overall bar was tracking scan
-      // progress, so reset it rather than leaving a stale 100%/partial fill
-      // sitting there before the next scan or download run.
-      setAsciiBar("overall-progress", 0);
-      break;
-    case "scan_complete":
-      // OPT-002: use payload.total for a small structured summary alongside
-      // the message, instead of leaving it unread on the wire.
-      $("status-text").textContent = payload.message;
-      logLine(`[OK] ${payload.message} (total tracks: ${payload.total})`);
-      toast("ok", payload.message);
-      blinkStatus();
-      break;
-    case "download_complete":
-      // OPT-002: same treatment for succeeded/skipped -- shown in the log
-      // line as a structured breakdown rather than only inside the string.
-      $("status-text").textContent = payload.message;
-      logLine(
-        `[${payload.failed > 0 ? "WARN" : "OK"}] ${payload.message} ` +
-        `(succeeded: ${payload.succeeded}, failed: ${payload.failed}, skipped: ${payload.skipped})`
-      );
-      toast(payload.failed > 0 ? "warn" : "ok", payload.message);
-      blinkStatus();
-      break;
-    case "download_failures":
-      showDownloadFailures(payload);
-      break;
-  }
-}
+const handleBridgeEvent = createEventProtocol({
+  track_update: (payload) => { tracks[payload.index] = payload; renderTrackRow(payload); },
+  clear_tracks: () => { tracks = {}; $("track-body").innerHTML = ""; },
+  status: (payload) => { $("status-text").textContent = payload; logLine(payload); },
+  progress: (payload) => setAsciiBar("overall-progress", payload),
+  slot_update: (payload) => setSlot(payload.slot, payload.current_file, payload.percent),
+  slots_init: (payload) => setSlotCount(payload.count),
+  busy: (payload) => setBusy(payload),
+  error: (payload) => toast("error", payload),
+  scan_done: () => setAsciiBar("overall-progress", 0),
+  scan_complete: (payload) => {
+    $("status-text").textContent = payload.message;
+    logLine(`[OK] ${payload.message} (total tracks: ${payload.total})`);
+    toast("ok", payload.message);
+    blinkStatus();
+  },
+  download_complete: (payload) => {
+    $("status-text").textContent = payload.message;
+    logLine(`[${payload.failed > 0 ? "WARN" : "OK"}] ${payload.message} ` +
+      `(succeeded: ${payload.succeeded}, failed: ${payload.failed}, skipped: ${payload.skipped})`);
+    toast(payload.failed > 0 ? "warn" : "ok", payload.message);
+    blinkStatus();
+  },
+  download_failures: (payload) => showDownloadFailures(payload),
+});
 
 // Makes the status line blink briefly (reusing the same blink keyframe the
 // [WARN] connection pill uses) to flag "this run just finished" without

@@ -1,180 +1,279 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ctrl+shift+mp3</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div class="crt" aria-hidden="true"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ctrl+shift+mp3</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="crt" aria-hidden="true"></div>
 
-  <header>
-    <div class="brand">
-      <span class="brand-glyph">&gt;_</span>
-      <div class="brand-text">
-        <h1><span id="boot-title"></span><span class="cursor">_</span></h1>
-        <div id="sys-log" class="sys-log" role="status" aria-live="polite">&gt; booting...</div>
-      </div>
-    </div>
-    <div class="header-actions">
-      <span id="conn-status" class="pill pill-muted">[ CONN: -- ]</span>
-      <button id="btn-clear-cache" class="btn-bracket">[ CLEAR CACHE ]</button>
-      <button id="btn-settings" class="btn-bracket">[ SETTINGS ]</button>
-      <button id="btn-config-path" class="btn-bracket">[ CONFIG PATH ]</button>
-    </div>
-  </header>
-
-  <main>
-    <section id="scan-card" class="pane">
-      <div class="pane-bar"><span class="pane-num">01</span><span class="pane-name">scan // playlist input</span></div>
-      <div class="pane-body">
-        <label for="link-input">spotify or youtube playlist link</label>
-        <div class="row">
-          <div class="prompt-field grow">
-            <span class="prompt-prefix">paste&gt;</span>
-            <input id="link-input" type="text" placeholder="https://open.spotify.com/playlist/... or https://youtube.com/playlist?list=..." />
-          </div>
-          <button id="btn-scan" class="btn-bracket">[ SCAN ]</button>
-          <button id="btn-add-queue" class="btn-bracket">[ ADD TO QUEUE ]</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="queue-card" class="pane">
-      <div class="pane-bar"><span class="pane-num">02</span><span class="pane-name">queue // batch scan</span></div>
-      <div class="pane-body">
-        <label>playlists queued &mdash; scanned together, duplicates merged</label>
-        <div class="row">
-          <select id="queue-list" multiple size="4"></select>
-          <div class="col">
-            <button id="btn-remove-queue" class="btn-bracket">[ REMOVE SELECTED ]</button>
-            <button id="btn-clear-queue" class="btn-bracket">[ CLEAR QUEUE ]</button>
-            <button id="btn-scan-all" class="btn-bracket primary">[ SCAN ALL -&gt; MERGE ]</button>
+    <header>
+      <div class="brand">
+        <span class="brand-glyph">&gt;_</span>
+        <div class="brand-text">
+          <h1><span id="boot-title"></span><span class="cursor">_</span></h1>
+          <div id="sys-log" class="sys-log" role="status" aria-live="polite">
+            &gt; booting...
           </div>
         </div>
       </div>
-    </section>
+      <div class="header-actions">
+        <span id="conn-status" class="pill pill-muted">[ CONN: -- ]</span>
+        <button id="btn-clear-cache" class="btn-bracket">
+          [ CLEAR CACHE ]
+        </button>
+        <button id="btn-settings" class="btn-bracket">[ SETTINGS ]</button>
+        <button id="btn-config-path" class="btn-bracket">
+          [ CONFIG PATH ]
+        </button>
+      </div>
+    </header>
 
-    <section id="output-card" class="pane">
-      <div class="pane-bar"><span class="pane-num">03</span><span class="pane-name">output // usb target</span></div>
-      <div class="pane-body">
-        <label for="output-input">output folder</label>
-        <div class="row">
-          <div class="prompt-field grow">
-            <span class="prompt-prefix">usb:~$</span>
-            <input id="output-input" type="text" readonly />
+    <main>
+      <section id="scan-card" class="pane">
+        <div class="pane-bar">
+          <span class="pane-num">01</span
+          ><span class="pane-name">scan // playlist input</span>
+        </div>
+        <div class="pane-body">
+          <label for="link-input">spotify or youtube playlist link</label>
+          <div class="row">
+            <div class="prompt-field grow">
+              <span class="prompt-prefix">paste&gt;</span>
+              <input
+                id="link-input"
+                type="text"
+                placeholder="https://open.spotify.com/playlist/... or https://youtube.com/playlist?list=..."
+              />
+            </div>
+            <button id="btn-scan" class="btn-bracket">[ SCAN ]</button>
+            <button id="btn-add-queue" class="btn-bracket">
+              [ ADD TO QUEUE ]
+            </button>
           </div>
-          <button id="btn-browse-output" class="btn-bracket">[ BROWSE... ]</button>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section id="table-card" class="pane">
-      <div class="pane-bar"><span class="pane-num">04</span><span class="pane-name">tracks // match table</span><button id="btn-clear-tracks" class="btn-bracket small">[ CLEAR ALL ]</button></div>
-      <div class="pane-body no-pad">
-        <div class="table-scroll">
-          <table id="track-table">
-            <thead>
-              <tr>
-                <th>#</th><th>title</th><th>artist</th><th>from playlist(s)</th><th>status</th><th>match %</th>
-              </tr>
-            </thead>
-            <tbody id="track-body"></tbody>
-          </table>
+      <section id="queue-card" class="pane">
+        <div class="pane-bar">
+          <span class="pane-num">02</span
+          ><span class="pane-name">queue // batch scan</span>
         </div>
-      </div>
-    </section>
-
-    <section id="override-card" class="pane">
-      <div class="pane-bar"><span class="pane-num">05</span><span class="pane-name">override // manual url</span></div>
-      <div class="pane-body">
-        <label>manual override url for selected track</label>
-        <div class="row">
-          <div class="prompt-field grow">
-            <span class="prompt-prefix">override&gt;</span>
-            <input id="override-input" type="text" placeholder="paste a youtube url" />
+        <div class="pane-body">
+          <label
+            >playlists queued &mdash; scanned together, duplicates merged</label
+          >
+          <div class="row">
+            <select id="queue-list" multiple size="4"></select>
+            <div class="col">
+              <button id="btn-remove-queue" class="btn-bracket">
+                [ REMOVE SELECTED ]
+              </button>
+              <button id="btn-clear-queue" class="btn-bracket">
+                [ CLEAR QUEUE ]
+              </button>
+              <button id="btn-scan-all" class="btn-bracket primary">
+                [ SCAN ALL -&gt; MERGE ]
+              </button>
+            </div>
           </div>
-          <button id="btn-apply-override" class="btn-bracket">[ APPLY ]</button>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section id="progress-card" class="pane">
-      <div class="pane-bar"><span class="pane-num">06</span><span class="pane-name">proc // download</span></div>
-      <div class="pane-body">
-        <div id="download-slots" class="download-slots"></div>
-        <div class="row-between">
-          <div id="overall-progress" class="ascii-bar grow" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
-          <span id="status-text"></span>
+      <section id="output-card" class="pane">
+        <div class="pane-bar">
+          <span class="pane-num">03</span
+          ><span class="pane-name">output // usb target</span>
         </div>
-        <div class="row">
-          <button id="btn-download-all" class="btn-bracket primary">[ DOWNLOAD ALL MATCHED ]</button>
-          <button id="btn-retry-failed" class="btn-bracket">[ RETRY FAILED ]</button>
-          <button id="btn-stop" class="btn-bracket warn">[ STOP ]</button>
-          <button id="btn-export" class="btn-bracket">[ EXPORT LOG (CSV) ]</button>
+        <div class="pane-body">
+          <label for="output-input">output folder</label>
+          <div class="row">
+            <div class="prompt-field grow">
+              <span class="prompt-prefix">usb:~$</span>
+              <input id="output-input" type="text" readonly />
+            </div>
+            <button id="btn-browse-output" class="btn-bracket">
+              [ BROWSE... ]
+            </button>
+          </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
 
-  <dialog id="settings-dialog" class="term-dialog">
-    <form method="dialog" id="settings-form">
-      <div class="pane-bar dialog-bar"><span class="pane-name">$ vim ~/.config/ctrl-shift-mp3.conf</span></div>
+      <section id="table-card" class="pane">
+        <div class="pane-bar">
+          <span class="pane-num">04</span
+          ><span class="pane-name">tracks // match table</span
+          ><button id="btn-clear-tracks" class="btn-bracket small">
+            [ CLEAR ALL ]
+          </button>
+        </div>
+        <div class="pane-body no-pad">
+          <div class="table-scroll">
+            <table id="track-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>title</th>
+                  <th>artist</th>
+                  <th>from playlist(s)</th>
+                  <th>status</th>
+                  <th>match %</th>
+                </tr>
+              </thead>
+              <tbody id="track-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="override-card" class="pane">
+        <div class="pane-bar">
+          <span class="pane-num">05</span
+          ><span class="pane-name">override // manual url</span>
+        </div>
+        <div class="pane-body">
+          <label>manual override url for selected track</label>
+          <div class="row">
+            <div class="prompt-field grow">
+              <span class="prompt-prefix">override&gt;</span>
+              <input
+                id="override-input"
+                type="text"
+                placeholder="paste a youtube url"
+              />
+            </div>
+            <button id="btn-apply-override" class="btn-bracket">
+              [ APPLY ]
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="progress-card" class="pane">
+        <div class="pane-bar">
+          <span class="pane-num">06</span
+          ><span class="pane-name">proc // download</span>
+        </div>
+        <div class="pane-body">
+          <div id="download-slots" class="download-slots"></div>
+          <div class="row-between">
+            <div
+              id="overall-progress"
+              class="ascii-bar grow"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            ></div>
+            <span id="status-text"></span>
+          </div>
+          <div class="row">
+            <button id="btn-download-all" class="btn-bracket primary">
+              [ DOWNLOAD ALL MATCHED ]
+            </button>
+            <button id="btn-retry-failed" class="btn-bracket">
+              [ RETRY FAILED ]
+            </button>
+            <button id="btn-stop" class="btn-bracket warn">[ STOP ]</button>
+            <button id="btn-export" class="btn-bracket">
+              [ EXPORT LOG (CSV) ]
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="settings-dialog" class="term-dialog">
+      <form method="dialog" id="settings-form">
+        <div class="pane-bar dialog-bar">
+          <span class="pane-name">$ vim ~/.config/ctrl-shift-mp3.conf</span>
+        </div>
+        <div class="dialog-body">
+          <label class="cfg-row"
+            >SPOTIFY_CLIENT_ID <input id="cfg-client-id" type="text"
+          /></label>
+          <label class="cfg-row"
+            >SPOTIFY_CLIENT_SECRET
+            <input id="cfg-client-secret" type="password"
+          /></label>
+          <label class="cfg-row"
+            >QUALITY_KBPS
+            <select id="cfg-quality">
+              <option value="128">128</option>
+              <option value="192">192</option>
+              <option value="256">256</option>
+              <option value="320">320</option>
+            </select>
+          </label>
+          <label class="cfg-row"
+            >CONFIDENCE_THRESHOLD
+            <input id="cfg-threshold" type="number" min="0" max="100"
+          /></label>
+          <label class="cfg-row"
+            >CONCURRENT_DOWNLOADS
+            <select id="cfg-concurrency">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+            </select>
+          </label>
+          <label class="cfg-toggle"
+            ><input id="cfg-skip-existing" type="checkbox" />
+            skip_existing_files</label
+          >
+          <label class="cfg-toggle"
+            ><input id="cfg-track-numbers" type="checkbox" />
+            add_track_number_prefix</label
+          >
+          <label class="cfg-toggle"
+            ><input id="cfg-cover-art" type="checkbox" /> embed_cover_art</label
+          >
+          <div class="row">
+            <button
+              id="btn-save-settings"
+              type="button"
+              class="btn-bracket primary"
+            >
+              [ :WQ SAVE ]
+            </button>
+            <button id="btn-close-settings" type="button" class="btn-bracket">
+              [ :Q CANCEL ]
+            </button>
+          </div>
+          <p id="settings-msg"></p>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="failures-dialog" class="term-dialog">
+      <div class="pane-bar dialog-bar">
+        <span class="pane-name">failures // download log</span>
+        <button id="btn-close-failures" class="btn-bracket small">[ X ]</button>
+      </div>
       <div class="dialog-body">
-        <label class="cfg-row">SPOTIFY_CLIENT_ID <input id="cfg-client-id" type="text" /></label>
-        <label class="cfg-row">SPOTIFY_CLIENT_SECRET <input id="cfg-client-secret" type="password" /></label>
-        <label class="cfg-row">QUALITY_KBPS
-          <select id="cfg-quality">
-            <option value="128">128</option>
-            <option value="192">192</option>
-            <option value="256">256</option>
-            <option value="320">320</option>
-          </select>
-        </label>
-        <label class="cfg-row">CONFIDENCE_THRESHOLD <input id="cfg-threshold" type="number" min="0" max="100" /></label>
-        <label class="cfg-row">CONCURRENT_DOWNLOADS
-          <select id="cfg-concurrency">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-          </select>
-        </label>
-        <label class="cfg-toggle"><input id="cfg-skip-existing" type="checkbox" /> skip_existing_files</label>
-        <label class="cfg-toggle"><input id="cfg-track-numbers" type="checkbox" /> add_track_number_prefix</label>
-        <label class="cfg-toggle"><input id="cfg-cover-art" type="checkbox" /> embed_cover_art</label>
-        <div class="row">
-          <button id="btn-save-settings" type="button" class="btn-bracket primary">[ :WQ SAVE ]</button>
-          <button id="btn-close-settings" type="button" class="btn-bracket">[ :Q CANCEL ]</button>
-        </div>
-        <p id="settings-msg"></p>
+        <p id="failures-summary" class="failures-summary"></p>
+        <ul id="failures-list" class="failures-list"></ul>
       </div>
-    </form>
-  </dialog>
+    </dialog>
 
-  <dialog id="failures-dialog" class="term-dialog">
-    <div class="pane-bar dialog-bar">
-      <span class="pane-name">failures // download log</span>
-      <button id="btn-close-failures" class="btn-bracket small">[ X ]</button>
-    </div>
-    <div class="dialog-body">
-      <p id="failures-summary" class="failures-summary"></p>
-      <ul id="failures-list" class="failures-list"></ul>
-    </div>
-  </dialog>
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-  <div id="toast-container" class="toast-container" aria-live="polite"></div>
-
-  <script src="app.js"></script>
-</body>
+    <script src="protocol.js"></script>
+    <script src="app.js"></script>
+  </body>
 </html>
