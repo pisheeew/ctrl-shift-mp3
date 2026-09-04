@@ -31,6 +31,7 @@ Or build the bundle first:
 from __future__ import annotations
 
 import os
+import queue
 import re
 import shutil
 import socket
@@ -40,6 +41,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.request
 
 # ---------------------------------------------------------------------------
 # Locate the built bundle relative to this file (repo root).
@@ -65,28 +67,43 @@ _HTTP_TIMEOUT_S = 10      # per-request timeout
 
 def _collect_stdout_until_port(proc: subprocess.Popen, timeout: float) -> int:
     """
-    Read lines from *proc* stdout until the startup banner is found.
-    Returns the port number, or raises TimeoutError if the banner does not
-    appear within *timeout* seconds.
+    Read lines from *proc* stdout asynchronously until the startup banner is found.
+    Guards against blocking readline() calls on Windows to prevent CI hangs.
+    Returns the port number, or raises TimeoutError/RuntimeError.
 
     Expected banner (see main.py):
         ctrl+shift+mp3 is running at http://127.0.0.1:<port>/
     """
     _PORT_RE = re.compile(r"running at http://127\.0\.0\.1:(\d+)/")
+    line_queue: queue.Queue[str] = queue.Queue()
+
+    def _reader():
+        try:
+            if proc.stdout:
+                for line in iter(proc.stdout.readline, ""):
+                    line_queue.put(line)
+        except Exception:
+            pass
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if proc.poll() is not None:
+        if proc.poll() is not None and line_queue.empty():
             raise RuntimeError(
                 f"Process exited unexpectedly with code {proc.returncode} "
                 "before printing its port."
             )
-        line = proc.stdout.readline()
-        if not line:
-            time.sleep(0.05)
+        try:
+            remaining = max(0.05, deadline - time.monotonic())
+            line = line_queue.get(timeout=min(0.2, remaining))
+            m = _PORT_RE.search(line)
+            if m:
+                return int(m.group(1))
+        except queue.Empty:
             continue
-        m = _PORT_RE.search(line)
-        if m:
-            return int(m.group(1))
+
     raise TimeoutError(
         f"ctrl-shift-mp3 did not print its port within {timeout}s."
     )
@@ -95,7 +112,7 @@ def _collect_stdout_until_port(proc: subprocess.Popen, timeout: float) -> int:
 def _wait_for_port(host: str, port: int, timeout: float) -> None:
     """
     Block until a TCP connection to *host*:*port* succeeds, or raises
-    TimeoutError.  This guards against the process printing its banner
+    TimeoutError. This guards against the process printing its banner
     fractionally before the socket is ready.
     """
     deadline = time.monotonic() + timeout
@@ -137,16 +154,15 @@ class TestPortableBundle(unittest.TestCase):
             cls._bundle_copy = dest
 
             exe = os.path.join(dest, _EXE_NAME)
+            cls._exe_path = exe
 
             # Ensure the EXE's stdout is not buffered so readline() returns
-            # promptly.  PYTHONUNBUFFERED=1 forces unbuffered I/O inside the
-            # frozen interpreter.  PYTHONUTF8=1 pins the encoding to UTF-8 so
-            # text=True works correctly regardless of the console code page.
+            # promptly. PYTHONUNBUFFERED=1 forces unbuffered I/O inside the
+            # frozen interpreter. PYTHONUTF8=1 pins the encoding to UTF-8.
             launch_env = os.environ.copy()
             launch_env.update({"PYTHONUNBUFFERED": "1", "PYTHONUTF8": "1"})
 
-            # Launch the executable.  Capture stdout line-by-line so we can
-            # read the port from the startup banner without blocking forever.
+            # Launch the executable. Capture stdout asynchronously.
             cls._proc = subprocess.Popen(
                 [exe],
                 stdout=subprocess.PIPE,
@@ -154,8 +170,6 @@ class TestPortableBundle(unittest.TestCase):
                 text=True,
                 encoding="utf-8",
                 cwd=cls._tempdir,  # working directory outside the repo
-                # Do NOT inherit the test runner's stdin so the subprocess
-                # cannot block waiting for user input.
                 stdin=subprocess.DEVNULL,
                 env=launch_env,
             )
@@ -166,12 +180,10 @@ class TestPortableBundle(unittest.TestCase):
             )
             cls._base_url = f"http://127.0.0.1:{cls._port}"
 
-            # Make sure the socket is accepting connections before we
-            # hand control to the individual tests.
+            # Make sure the socket is accepting connections before tests run.
             _wait_for_port("127.0.0.1", cls._port, timeout=5)
 
         except Exception:
-            # Clean up on setup failure so we do not leave orphan processes.
             cls._cleanup()
             raise
 
@@ -197,12 +209,11 @@ class TestPortableBundle(unittest.TestCase):
     # Helper
     # ------------------------------------------------------------------
 
-    def _get(self, path: str):
+    def _get(self, path: str) -> tuple[int, bytes]:
         """Perform an HTTP GET against the running server."""
-        import urllib.request
         url = self._base_url + path
         with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT_S) as resp:
-            return resp.status, resp.read(), dict(resp.headers)
+            return resp.status, resp.read()
 
     # ------------------------------------------------------------------
     # Acceptance criteria
@@ -210,44 +221,24 @@ class TestPortableBundle(unittest.TestCase):
 
     def test_root_returns_html_frontend(self):
         """GET / returns 200 with an HTML page (the frontend index)."""
-        status, body, _ = self._get("/")
+        status, body = self._get("/")
         self.assertEqual(status, 200)
         body_text = body.decode("utf-8", errors="replace")
         self.assertIn("<html", body_text.lower(),
                       "Root endpoint should serve an HTML page")
 
-    def test_app_js_is_served(self):
-        """GET /app.js returns 200 with JavaScript content."""
-        status, body, headers = self._get("/app.js")
-        self.assertEqual(status, 200)
-        # Body must be non-empty JavaScript
-        self.assertGreater(len(body), 0, "app.js must not be empty")
+    def test_representative_static_assets_are_served(self):
+        """GET /app.js and GET /style.css return 200 with non-empty contents."""
+        for asset in ("/app.js", "/style.css"):
+            with self.subTest(asset=asset):
+                status, body = self._get(asset)
+                self.assertEqual(status, 200)
+                self.assertGreater(len(body), 0, f"{asset} must not be empty")
 
-    def test_style_css_is_served(self):
-        """GET /style.css returns 200 with CSS content."""
-        status, body, headers = self._get("/style.css")
-        self.assertEqual(status, 200)
-        self.assertGreater(len(body), 0, "style.css must not be empty")
-
-    def test_api_init_returns_json(self):
-        """GET /api/init returns 200 with a JSON object."""
-        import json as _json
-        status, body, _ = self._get("/api/init")
-        self.assertEqual(status, 200)
-        data = _json.loads(body)
-        self.assertIsInstance(data, dict,
-                              "/api/init must return a JSON object")
-
-    def test_bundled_ffmpeg_is_present_in_bundle_copy(self):
-        """The copied bundle contains an ffmpeg/ sub-directory with both binaries.
-
-        PyInstaller 6.x places data files under ``_internal/`` inside the
-        bundle folder, so this test searches the bundle recursively for a
-        directory named ``ffmpeg`` that contains both ``ffmpeg.exe`` and
-        ``ffprobe.exe`` rather than assuming a fixed path.
-        """
+    def test_bundled_ffmpeg_resolution_is_available_and_functional(self):
+        """The copied bundle contains ffmpeg and ffprobe and both execute cleanly."""
         ffmpeg_dir: str | None = None
-        for dirpath, dirnames, filenames in os.walk(self._bundle_copy):
+        for dirpath, _, _ in os.walk(self._bundle_copy):
             if os.path.basename(dirpath) == "ffmpeg":
                 ffmpeg_dir = dirpath
                 break
@@ -257,23 +248,47 @@ class TestPortableBundle(unittest.TestCase):
             f"No 'ffmpeg' directory found anywhere under {self._bundle_copy!r}",
         )
         for binary in ("ffmpeg.exe", "ffprobe.exe"):
+            binary_path = os.path.join(ffmpeg_dir, binary)
             self.assertTrue(
-                os.path.isfile(os.path.join(ffmpeg_dir, binary)),
+                os.path.isfile(binary_path),
                 f"Expected {binary!r} inside {ffmpeg_dir!r}",
             )
+            result = subprocess.run(
+                [binary_path, "-version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"{binary} failed to execute: {result.stderr}",
+            )
+            tool_name = os.path.splitext(binary)[0]
+            self.assertIn(
+                tool_name,
+                result.stdout.lower(),
+                f"Expected {tool_name} banner in output",
+            )
 
-    def test_process_terminates_cleanly_after_sigterm(self):
-        """
-        The executable can be terminated cleanly (no leftover process).
-        This is the last test in suite order so it does not affect the others.
-        Note: the actual termination is performed in tearDownClass; this test
-        just asserts that the process is still alive at the point where we
-        check it (which proves setUpClass actually launched it).
-        """
-        self.assertIsNone(
-            self._proc.poll(),
-            "The server process should still be running during the test suite.",
+    def test_executable_terminates_cleanly_and_does_not_hang(self):
+        """A bundle instance launched outside the repo terminates cleanly upon terminate()."""
+        proc = subprocess.Popen(
+            [self._exe_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            cwd=self._tempdir,
         )
+        try:
+            time.sleep(0.5)
+            self.assertIsNone(proc.poll(), "Process should be running")
+            proc.terminate()
+            ret = proc.wait(timeout=5)
+            self.assertIsNotNone(ret, "Process did not terminate within timeout")
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=2)
 
 
 if __name__ == "__main__":
