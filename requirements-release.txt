@@ -1,0 +1,6 @@
+# Exact versions used by the portable Windows release build.
+Flask==3.1.2
+yt-dlp==2025.8.27
+rapidfuzz==3.13.0
+spotipy==2.25.1
+pyinstaller==6.15.0

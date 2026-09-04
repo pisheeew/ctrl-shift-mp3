@@ -18,7 +18,7 @@ on your machine and opens a terminal-styled interface in your browser.
 | Audio source   | Matching YouTube videos via `yt-dlp`                         |
 | Output         | Tagged MP3 files with cover art                              |
 | Interface      | Local browser UI with live progress updates                  |
-| Required tools | Python, project dependencies, and `ffmpeg`                   |
+| Required tools | Python, project dependencies, and `ffmpeg` (release bundles these) |
 | Network access | Spotify API and YouTube are contacted during scans/downloads |
 
 ## Use responsibly
@@ -72,6 +72,20 @@ default browser. Keep the process running while you use the app. Close the
 server with `Ctrl+C`; closing the browser tab does not stop it. Use
 `python main.py --debug` for Flask diagnostic output.
 
+### Build a portable Windows release
+
+From a Windows PowerShell prompt, run:
+
+```powershell
+.\build-release.ps1
+```
+
+The script installs the exact versions in `requirements-release.txt`, downloads
+the pinned FFmpeg 7.1.1 BtbN win64 GPL archive, and creates
+`dist\ctrl-shift-mp3-7.1.1-win64.zip`. Extract that ZIP and run
+`ctrl-shift-mp3.exe`; Python, FFmpeg, frontend assets, and native dialog
+resources are included.
+
 ### 3. Scan and download
 
 1. Paste a YouTube playlist link into the app.
@@ -118,9 +132,11 @@ credentials file with `chmod 600 ~/.playlist_downloader_config.json`.
 ### `ffmpeg` is not found
 
 Install both `ffmpeg` and `ffprobe`, add their executable directory to `PATH`,
-then restart the terminal before running the app again. Packaged releases
-also accept matching bundled executables; if neither source contains both
-tools, the startup error identifies the missing requirement.
+then restart the terminal before running the app again. The release build
+downloads both binaries from the pinned
+[BtbN FFmpeg 7.1.1 win64 GPL archive](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2025-03-31-12-56).
+Packaged releases check their bundled executables first, then fall back to
+`PATH`.
 
 ### The browser does not open
 
