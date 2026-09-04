@@ -4,7 +4,10 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
 $ffmpegVersion = "7.1.1"
-$ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-03-31-12-56/ffmpeg-n${ffmpegVersion}-win64-gpl-${ffmpegVersion}.zip"
+$ffmpegTag = "autobuild-2025-08-31-13-00"
+$ffmpegArchiveName = "ffmpeg-n7.1.1-57-g1b48158a23-win64-gpl-7.1.zip"
+$ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegTag/$ffmpegArchiveName"
+$ffmpegSha256 = "d1e01af698b98f3bec540bc6db366efd45d794f307d67ab97dbf4eab96e4c20a"
 $vendorRoot = Join-Path $root "vendor"
 $archive = Join-Path $vendorRoot "ffmpeg-$ffmpegVersion.zip"
 $extractRoot = Join-Path $vendorRoot "ffmpeg-extract"
@@ -21,7 +24,12 @@ New-Item -ItemType Directory -Force -Path $vendorRoot | Out-Null
 if (-not (Test-Path (Join-Path $ffmpegDir "ffmpeg.exe")) -or
     -not (Test-Path (Join-Path $ffmpegDir "ffprobe.exe"))) {
     Write-Host "Downloading FFmpeg $ffmpegVersion from the pinned BtbN Windows GPL build..."
-    Invoke-WebRequest -Uri $ffmpegUrl -OutFile $archive
+    curl.exe -L --fail --output $archive $ffmpegUrl
+    if ($LASTEXITCODE -ne 0) { throw "Could not download the pinned FFmpeg archive." }
+    $actualHash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $ffmpegSha256) {
+        throw "FFmpeg archive checksum mismatch: expected $ffmpegSha256, got $actualHash."
+    }
     if (Test-Path $extractRoot) { Remove-Item $extractRoot -Recurse -Force }
     Expand-Archive -Path $archive -DestinationPath $extractRoot -Force
     $bin = Get-ChildItem -Path $extractRoot -Filter ffmpeg.exe -Recurse | Select-Object -First 1

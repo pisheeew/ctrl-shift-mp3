@@ -134,7 +134,7 @@ credentials file with `chmod 600 ~/.playlist_downloader_config.json`.
 Install both `ffmpeg` and `ffprobe`, add their executable directory to `PATH`,
 then restart the terminal before running the app again. The release build
 downloads both binaries from the pinned
-[BtbN FFmpeg 7.1.1 win64 GPL archive](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2025-03-31-12-56).
+[BtbN FFmpeg 7.1.1 win64 GPL archive](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2025-08-31-13-00).
 Packaged releases check their bundled executables first, then fall back to
 `PATH`.
 
