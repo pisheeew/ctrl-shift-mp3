@@ -177,6 +177,20 @@ def _validate_export_path(path: str) -> Optional[str]:
     return None
 
 
+def _is_local_host(host_header: str) -> bool:
+    """Return True only for a Host header naming this machine (ADR-0001).
+    The port is ignored -- the app may bind a fallback port -- but the
+    hostname itself must be a loopback name; anything else (including a
+    rebinding attacker's own DNS name) is rejected. IPv6 literals are not
+    allowed since the server binds IPv4 loopback only."""
+    hostname = host_header.strip().lower()
+    if ":" in hostname:
+        hostname, _, port_part = hostname.rpartition(":")
+        if not port_part.isdigit():
+            return False
+    return hostname in ("127.0.0.1", "localhost")
+
+
 # --------------------------------------------------------------------------- #
 # Native file/folder dialogs - a tiny hidden Tk root just for the OS picker.
 # The rest of the app has no Tk UI; this is purely for the folder/save dialogs
@@ -885,6 +899,15 @@ def create_app(frontend_dir: Optional[str] = None, port: int = PORT) -> Flask:
         origin = request.headers.get("Origin")
         allowed_origin = f"http://127.0.0.1:{port}"
         if origin is not None and origin != allowed_origin:
+            abort(403)
+
+        # DNS-rebinding defense (SEC-001, ADR-0001): a rebinding page's
+        # requests arrive with the attacker's hostname in the Host header
+        # and no Origin header, so the origin check above alone cannot see
+        # them. Every request must therefore also name this machine in
+        # Host, or it is rejected before routing. The app's own browser
+        # frontend always sends Host; a missing one is rejected too.
+        if not _is_local_host(request.headers.get("Host") or ""):
             abort(403)
 
     @app.after_request

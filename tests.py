@@ -303,6 +303,44 @@ class TestPackagedStartup(unittest.TestCase):
         warning.assert_called_once()
 
 
+class TestHostHeaderAllowlist(unittest.TestCase):
+    """ADR-0001: the browser-facing API must only answer requests whose
+    Host header is this machine, so a DNS-rebinding page cannot reach the
+    local server under an attacker-controlled hostname. The app may bind a
+    fallback port, so any port on a local hostname is fine."""
+
+    def _client(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        with open(os.path.join(d.name, "index.html"), "w", encoding="utf-8") as page:
+            page.write("packaged frontend")
+        return server.create_app(frontend_dir=d.name).test_client()
+
+    def _get_status(self, client, host):
+        response = client.get("/", headers={"Host": host})
+        try:
+            return response.status_code
+        finally:
+            response.close()
+
+    def test_foreign_host_is_rejected(self):
+        client = self._client()
+        for host in ("evil.example", "attacker.example:8743", "127.0.0.1.example.com"):
+            with self.subTest(host=host):
+                self.assertEqual(self._get_status(client, host), 403)
+
+    def test_local_hostnames_on_any_port_are_accepted(self):
+        client = self._client()
+        for host in ("127.0.0.1", "127.0.0.1:8743", "127.0.0.1:54321",
+                     "localhost", "localhost:8743", "localhost:54321"):
+            with self.subTest(host=host):
+                self.assertEqual(self._get_status(client, host), 200)
+
+    def test_missing_host_is_rejected(self):
+        client = self._client()
+        self.assertEqual(self._get_status(client, ""), 403)
+
+
 class TestFfmpegResolution(unittest.TestCase):
     def test_prefers_bundled_ffmpeg_directory(self):
         # Use the filenames resolve_ffmpeg_location looks for on this

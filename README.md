@@ -250,7 +250,8 @@ The main modules are:
 - `tests.py` - automated unit tests.
 
 The local server is unauthenticated and should only be run on a machine and
-network you trust. It binds to `127.0.0.1` and includes origin checks, output
+network you trust. It binds to `127.0.0.1` and includes origin checks and a
+Host-header allowlist (so DNS-rebinding pages cannot reach the API), output
 path validation, formula-safe CSV export, and guards against overlapping runs.
 
 ### Release engineering
