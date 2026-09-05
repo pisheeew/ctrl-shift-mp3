@@ -43,7 +43,11 @@ Publishing is always a manual step. The workflow creates the release as a
 3. The **Release** workflow
    ([`.github/workflows/release.yml`](../../.github/workflows/release.yml))
    runs on `windows-latest` and, in order:
-   - checks out the tag and sets up the pinned Python;
+   - checks out the tag and stamps the tag version into `version_info.txt`
+     (`set_version.py`), so the exe metadata, ZIP name, and release notes all
+     identify the same version; a tag that is not `v<major>.<minor>.<patch>`
+     fails in this first step;
+   - sets up the pinned Python;
    - installs the pinned release dependencies;
    - runs the unit test suite (`tests.py`);
    - runs `build-release.ps1`, which installs the pinned requirements,
@@ -99,6 +103,7 @@ a mismatch fails the build before packaging.
 From a Windows checkout:
 
 ```powershell
+python set_version.py --tag v1.2.3                          # stamp exe metadata (optional, defaults to 1.0.0)
 powershell -ExecutionPolicy Bypass -File build-release.ps1   # pinned deps + FFmpeg + PyInstaller
 python smoke_test.py                                          # packaged smoke test
 python package_release.py --tag v1.2.3                        # versioned ZIP + checksum + notices + notes

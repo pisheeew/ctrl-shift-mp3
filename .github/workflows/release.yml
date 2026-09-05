@@ -28,6 +28,12 @@ jobs:
       - name: Check out the release tag
         uses: actions/checkout@v4
 
+      - name: Stamp the executable version from the tag
+        # Rewrites version_info.txt in the working tree so the exe metadata
+        # matches the tag, the ZIP name, and the generated release notes.
+        # Also fails the run fast if the tag is not v<major>.<minor>.<patch>.
+        run: python set_version.py --tag $env:GITHUB_REF_NAME
+
       - name: Set up the pinned Python
         uses: actions/setup-python@v5
         with:
