@@ -21,8 +21,8 @@ source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
-Start the app with `python main.py`; it serves the local UI at
-<http://127.0.0.1:8743/>.
+Start the app with `python main.py`; it serves the local UI on `127.0.0.1`
+(port 8743, or the next free port if that one is busy).
 
 ## Running the tests
 
