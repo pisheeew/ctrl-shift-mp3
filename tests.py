@@ -246,6 +246,31 @@ class TestProviderAndRunSeams(unittest.TestCase):
         self.assertEqual(matches[0][0]["id"], "test-video")
 
 
+@unittest.skipUnless(engine.SPOTIPY_AVAILABLE, "spotipy is not installed")
+class TestSpotifyTokenStorage(unittest.TestCase):
+    def test_authentication_writes_no_token_cache_file_to_working_directory(self):
+        token_response = mock.Mock(status_code=200)
+        token_response.json.return_value = {
+            "access_token": "test-access-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        }
+        with tempfile.TemporaryDirectory() as workdir:
+            previous_cwd = os.getcwd()
+            os.chdir(workdir)
+            try:
+                before = set(os.listdir(workdir))
+                lister = engine.SpotifyLister("fake-client-id", "fake-client-secret")
+                # The mocked POST is the token endpoint, so the real
+                # client-credentials flow runs without touching the network.
+                with mock.patch("requests.Session.post", return_value=token_response):
+                    lister.client.client_credentials_manager.get_access_token(as_dict=False)
+                after = set(os.listdir(workdir))
+            finally:
+                os.chdir(previous_cwd)
+        self.assertEqual(after, before)
+
+
 class TestPackagedStartup(unittest.TestCase):
     def test_resource_dir_prefers_frozen_bundle_location(self):
         with mock.patch.object(server.sys, "_MEIPASS", r"C:\bundle", create=True):

@@ -30,6 +30,7 @@ import yt_dlp
 # does today when no client id/secret are configured).
 try:
     import spotipy
+    from spotipy.cache_handler import MemoryCacheHandler
     from spotipy.oauth2 import SpotifyClientCredentials
     SPOTIPY_AVAILABLE = True
 except ImportError:  # spotipy not installed
@@ -132,7 +133,13 @@ class SpotifyLister:
     def __init__(self, client_id: str, client_secret: str):
         if not SPOTIPY_AVAILABLE:
             raise RuntimeError("spotipy is not installed")
-        auth = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+        # Memory-only token cache (ADR-0003): the default handler would write
+        # a live access token to a .cache file in the working directory.
+        auth = SpotifyClientCredentials(
+            client_id=client_id,
+            client_secret=client_secret,
+            cache_handler=MemoryCacheHandler(),
+        )
         self.client = spotipy.Spotify(client_credentials_manager=auth)
 
     def get_tracks(self, url: str) -> tuple[str, list[Track]]:
