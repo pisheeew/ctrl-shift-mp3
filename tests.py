@@ -378,19 +378,19 @@ class TestPackageRelease(unittest.TestCase):
 
     def test_release_pins_come_from_the_release_files(self):
         python_pins, ffmpeg_pins = package_release.load_release_pins()
-        self.assertIn(("flask", "3.1.2"), python_pins)
-        self.assertIn(("yt-dlp", "2025.8.27"), python_pins)
-        self.assertIn(("rapidfuzz", "3.13.0"), python_pins)
-        self.assertIn(("spotipy", "2.25.1"), python_pins)
+        self.assertIn(("flask", "3.1.3"), python_pins)
+        self.assertIn(("yt-dlp", "2026.8.19"), python_pins)
+        self.assertIn(("rapidfuzz", "3.14.6"), python_pins)
+        self.assertIn(("spotipy", "2.26.0"), python_pins)
         # PyInstaller is build tooling, not something the bundle ships.
         self.assertFalse(any(name == "pyinstaller" for name, _ in python_pins))
-        self.assertEqual(ffmpeg_pins["version"], "7.1.1")
+        self.assertEqual(ffmpeg_pins["version"], "9.0.1")
         self.assertEqual(ffmpeg_pins["sha256"],
-                         "d1e01af698b98f3bec540bc6db366efd45d794f307d67ab97dbf4eab96e4c20a")
+                         "a8ebbaf7a99185f5abc3a2d3a657521c38d7966f06b70468d7ab29a67fe8654f")
         self.assertEqual(
             ffmpeg_pins["url"],
             "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-            "autobuild-2025-08-31-13-00/ffmpeg-n7.1.1-57-g1b48158a23-win64-gpl-7.1.zip",
+            "autobuild-2026-09-05-13-10/ffmpeg-n9.0.1-26-g5c8e7e2433-win64-gpl-9.0.zip",
         )
 
     def test_assemble_release_builds_versioned_zip_with_notices_inside(self):
@@ -429,7 +429,7 @@ class TestPackageRelease(unittest.TestCase):
             package_release.write_notices(notices, python_pins, ffmpeg_pins)
             text = notices.read_text(encoding="utf-8")
         self.assertIn("flask", text.lower())
-        self.assertIn("3.1.2", text)
+        self.assertIn("3.1.3", text)
         self.assertIn("yt-dlp", text.lower())
         self.assertIn("BtbN/FFmpeg-Builds", text)
         self.assertIn(ffmpeg_pins["sha256"], text)

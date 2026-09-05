@@ -3,11 +3,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
-$ffmpegVersion = "7.1.1"
-$ffmpegTag = "autobuild-2025-08-31-13-00"
-$ffmpegArchiveName = "ffmpeg-n7.1.1-57-g1b48158a23-win64-gpl-7.1.zip"
+$ffmpegVersion = "9.0.1"
+$ffmpegTag = "autobuild-2026-09-05-13-10"
+$ffmpegArchiveName = "ffmpeg-n9.0.1-26-g5c8e7e2433-win64-gpl-9.0.zip"
 $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$ffmpegTag/$ffmpegArchiveName"
-$ffmpegSha256 = "d1e01af698b98f3bec540bc6db366efd45d794f307d67ab97dbf4eab96e4c20a"
+$ffmpegSha256 = "a8ebbaf7a99185f5abc3a2d3a657521c38d7966f06b70468d7ab29a67fe8654f"
 $vendorRoot = Join-Path $root "vendor"
 $archive = Join-Path $vendorRoot "ffmpeg-$ffmpegVersion.zip"
 $extractRoot = Join-Path $vendorRoot "ffmpeg-extract"

@@ -95,8 +95,8 @@ Every release input is pinned so the same tag rebuilds the same bundle:
 when generating notices, so the notices always describe the artifacts that
 were actually built. There is deliberately no second copy of the pins.
 
-Current FFmpeg pin: version 7.1.1, BtbN win64 GPL build
-[`autobuild-2025-08-31-13-00`](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2025-08-31-13-00).
+Current FFmpeg pin: version 9.0.1, BtbN win64 GPL build
+[`autobuild-2026-09-05-13-10`](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-09-05-13-10).
 The archive's SHA-256 is verified at download time by `build-release.ps1`;
 a mismatch fails the build before packaging.
 
@@ -112,7 +112,7 @@ python package_release.py --tag v1.2.3                        # versioned ZIP + 
 ```
 
 `build-release.ps1` produces the raw bundle ZIP under its FFmpeg-derived name
-(`dist\ctrl-shift-mp3-7.1.1-win64.zip`); `package_release.py` copies
+(`dist\ctrl-shift-mp3-9.0.1-win64.zip`); `package_release.py` copies
 `NOTICES.txt` into the bundle directory and rebuilds it as the versioned
 release ZIP, then generates the remaining assets. A local rebuild should be
 functionally equivalent to the CI artifact, though PyInstaller output is not
