@@ -10,6 +10,10 @@ on your machine and opens a terminal-styled interface in your browser.
 > This is not a hosted service. Your playlists, credentials, cache, and output
 > stay on your machine.
 
+> **Not affiliated.** This is an independent open-source project. It is not
+> affiliated with, endorsed by, or sponsored by Spotify AB, YouTube, or Google.
+> Spotify, YouTube, and Google are trademarks of their respective owners.
+
 ## At a glance
 
 |                | Details                                                      |
@@ -25,8 +29,10 @@ on your machine and opens a terminal-styled interface in your browser.
 
 Only download audio you have the right to use, such as music you own,
 properly licensed playlists, public-domain works, or Creative Commons content.
-Downloading copyrighted material without permission may violate platform terms
-or local law. You are responsible for how you use this project. See
+Downloading copyrighted material without permission may violate the
+[YouTube Terms of Service](https://www.youtube.com/t/terms) or the
+[Spotify Terms of Use](https://www.spotify.com/legal/end-user-agreement/),
+as well as local law. You are responsible for how you use this project. See
 [LICENSE](LICENSE) for the warranty disclaimer.
 
 ## Download for Windows
@@ -69,7 +75,7 @@ SHA-256 digest of the ZIP. In PowerShell, from the folder holding the
 download:
 
 ```powershell
-Get-FileHash .\ctrl-shift-mp3-windows-v1.0.0.zip -Algorithm SHA256
+Get-FileHash .\ctrl-shift-mp3-windows-v<version>.zip -Algorithm SHA256
 ```
 
 Compare the printed digest with the one recorded in the `.sha256` file (or
@@ -266,3 +272,12 @@ This project is available under the [MIT License](LICENSE). Flask, `yt-dlp`,
 RapidFuzz, and Spotipy remain subject to their own licenses. The Windows
 release ships `NOTICES.txt` with the full third-party inventory, including
 the GPL terms that cover redistribution of the bundled FFmpeg build.
+
+FFmpeg is free software under the GNU General Public License. The bundled
+binaries come from the pinned BtbN archive linked in
+[Troubleshooting](#ffmpeg-is-not-found), with the pinned tag and SHA-256
+digest recorded in `NOTICES.txt`. Upstream autobuild tags can disappear,
+so the complete corresponding source remains available independently of
+that build: it is published by the FFmpeg project at
+<https://ffmpeg.org/download.html>, and the exact build configuration used
+for the bundled binaries can be requested by opening an issue.
