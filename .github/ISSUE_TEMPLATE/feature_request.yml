@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an idea or an improvement for this project.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature design is discussed in issues before code is written. Describe
+        the problem first — the solution can be shaped together. Large or
+        ambiguous changes are easiest to land when the problem is concrete.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What are you trying to do, and what currently gets in the way?
+      placeholder: When downloading a large playlist, I have no way to tell which tracks will be retried...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would like to happen. A sketch is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches, workarounds, or existing tools that do not quite fit.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have checked the open and closed issues for a similar request.
+          required: true
