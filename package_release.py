@@ -15,6 +15,8 @@ It turns the single built ZIP into the reviewable draft-release set:
                                              packages, bundled FFmpeg, and
                                              the PyInstaller build tool)
   release-notes.md                           draft release body
+  release-assets.txt                         the paths to upload to the
+                                             draft release, one per line
 
 The pins are read from the same files the build itself uses, so the notices
 and notes always describe the artifacts that were actually built:
@@ -22,6 +24,8 @@ and notes always describe the artifacts that were actually built:
   - requirements-release.txt  for the pinned Python packages
   - build-release.ps1         for the pinned FFmpeg version, archive, and
                               archive checksum
+  - docs/licenses/GPL-2.0.txt the license text retained for the GPL
+                              FFmpeg build
 """
 
 from __future__ import annotations
@@ -169,9 +173,9 @@ def _license_files(dist: importlib.metadata.Distribution) -> str:
     return "\n\n".join(sections)
 
 
-def write_notices(path: Path, ffmpeg_pins: dict[str, str]) -> Path:
+def write_notices(path: Path, python_pins: list[tuple[str, str]],
+                  ffmpeg_pins: dict[str, str]) -> Path:
     """Write NOTICES.txt covering the bundled Python packages and FFmpeg."""
-    python_pins, _ = load_release_pins()
     dists = collect_python_distributions(python_pins)
 
     lines = [
@@ -216,6 +220,14 @@ def write_notices(path: Path, ffmpeg_pins: dict[str, str]) -> Path:
         if license_files:
             lines.extend(["", license_files])
 
+    gpl_text_path = REPO_ROOT / "docs" / "licenses" / "GPL-2.0.txt"
+    if not gpl_text_path.is_file():
+        raise RuntimeError(
+            f"Missing {gpl_text_path}: the GPL license text must be retained "
+            "for the redistributed FFmpeg build."
+        )
+    gpl_text = gpl_text_path.read_text(encoding="utf-8").strip()
+
     lines.extend([
         "",
         "2. Bundled FFmpeg",
@@ -230,12 +242,16 @@ def write_notices(path: Path, ffmpeg_pins: dict[str, str]) -> Path:
         "  Upstream:       https://ffmpeg.org",
         "",
         "This build is configured with --enable-gpl and is therefore distributed",
-        "under the GNU General Public License. The applicable license texts and",
-        "FFmpeg's own licensing documentation are available at",
-        "https://www.gnu.org/licenses/ and https://ffmpeg.org/legal.html.",
-        "FFmpeg is free software; redistribution must follow the GPL terms.",
-        "The pinned download URL above identifies the corresponding source for",
-        "the redistributed binaries.",
+        "under the GNU General Public License (version 2 or later, per FFmpeg's",
+        "licensing documentation at https://ffmpeg.org/legal.html; later license",
+        "versions are available at https://www.gnu.org/licenses/). FFmpeg is",
+        "free software; redistribution must follow the GPL terms. The pinned",
+        "download URL above identifies the corresponding source for the",
+        "redistributed binaries.",
+        "",
+        "GNU General Public License, version 2:",
+        "",
+        gpl_text,
         "",
         "3. Build tooling",
         "----------------",
@@ -349,8 +365,8 @@ def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
     checksum_path = zip_path.with_name(zip_path.name + ".sha256")
     checksum_path.write_text(f"{checksum}  {zip_path.name}\n", encoding="utf-8")
 
-    _, ffmpeg_pins = load_release_pins()
-    notices_path = write_notices(dist_dir / "NOTICES.txt", ffmpeg_pins)
+    python_pins, ffmpeg_pins = load_release_pins()
+    notices_path = write_notices(dist_dir / "NOTICES.txt", python_pins, ffmpeg_pins)
     notes_path = write_release_notes(
         dist_dir / "release-notes.md",
         version=version,
@@ -358,7 +374,17 @@ def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
         checksum=checksum,
         ffmpeg_version=ffmpeg_pins["version"],
     )
-    return {"zip": zip_path, "checksum": checksum_path, "notices": notices_path, "notes": notes_path}
+
+    # The release assets the workflow uploads to the draft release, in
+    # upload order. The workflow reads this file instead of re-deriving the
+    # names, so there is one place that owns the asset paths.
+    assets_list_path = dist_dir / "release-assets.txt"
+    assets_list_path.write_text(
+        "\n".join(str(p) for p in (zip_path, checksum_path, notices_path)) + "\n",
+        encoding="utf-8",
+    )
+    return {"zip": zip_path, "checksum": checksum_path, "notices": notices_path,
+            "notes": notes_path, "assets_list": assets_list_path}
 
 
 def main(argv: list[str] | None = None) -> None:

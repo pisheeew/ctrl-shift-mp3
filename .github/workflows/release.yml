@@ -3,10 +3,12 @@ name: Release
 # Cutting a release is one tagged run: test the project, build the pinned
 # Windows bundle, smoke-test it, assemble the reviewable assets, and attach
 # them to a draft GitHub Release. Publishing stays a manual review step.
+# The pattern pre-filters to digit-led tags (vfoo never runs); the dotted
+# v<major>.<minor>.<patch> form is enforced by package_release.py.
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
 
 permissions:
   contents: write
@@ -29,7 +31,8 @@ jobs:
       - name: Set up the pinned Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          # Matches the locally validated Python; bump deliberately.
+          python-version: "3.14.3"
 
       - name: Install the pinned release dependencies
         run: python -m pip install --requirement requirements-release.txt
@@ -59,10 +62,10 @@ jobs:
         run: python package_release.py --tag $env:GITHUB_REF_NAME
 
       - name: Create the draft release
+        # package_release.py wrote dist/release-assets.txt: the versioned ZIP,
+        # its checksum, and NOTICES.txt, one path per line.
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
-          $zip = "dist/ctrl-shift-mp3-windows-v$version.zip"
-          $checksum = "$zip.sha256"
-          gh release create "$env:GITHUB_REF_NAME" $zip $checksum dist/NOTICES.txt --draft --title "ctrl+shift+mp3 $env:GITHUB_REF_NAME" --notes-file dist/release-notes.md
+          $assets = Get-Content dist/release-assets.txt
+          gh release create "$env:GITHUB_REF_NAME" $assets --draft --title "ctrl+shift+mp3 $env:GITHUB_REF_NAME" --notes-file dist/release-notes.md

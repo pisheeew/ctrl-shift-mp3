@@ -338,6 +338,9 @@ class TestPackageRelease(unittest.TestCase):
             )
             self.assertTrue(assets["notices"].is_file())
             self.assertTrue(assets["notes"].is_file())
+            assets_list = assets["assets_list"].read_text(encoding="utf-8").splitlines()
+            self.assertEqual(assets_list,
+                             [str(assets["zip"]), str(assets["checksum"]), str(assets["notices"])])
 
     def test_assemble_release_rejects_missing_built_zip(self):
         with tempfile.TemporaryDirectory() as dist:
@@ -345,10 +348,10 @@ class TestPackageRelease(unittest.TestCase):
                 package_release.assemble_release("v1.2.3", dist_dir=Path(dist))
 
     def test_notices_cover_python_pins_and_ffmpeg_source(self):
-        _, ffmpeg_pins = package_release.load_release_pins()
+        python_pins, ffmpeg_pins = package_release.load_release_pins()
         with tempfile.TemporaryDirectory() as dist:
             notices = Path(dist) / "NOTICES.txt"
-            package_release.write_notices(notices, ffmpeg_pins)
+            package_release.write_notices(notices, python_pins, ffmpeg_pins)
             text = notices.read_text(encoding="utf-8")
         self.assertIn("flask", text.lower())
         self.assertIn("3.1.2", text)
@@ -356,6 +359,9 @@ class TestPackageRelease(unittest.TestCase):
         self.assertIn("BtbN/FFmpeg-Builds", text)
         self.assertIn(ffmpeg_pins["sha256"], text)
         self.assertIn("General Public License", text)
+        # The GPL text itself must be retained, not just linked.
+        self.assertIn("GNU GENERAL PUBLIC LICENSE", text)
+        self.assertIn("Version 2, June 1991", text)
 
     def test_release_notes_cover_required_guidance(self):
         with tempfile.TemporaryDirectory() as dist:
