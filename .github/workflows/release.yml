@@ -1,0 +1,68 @@
+name: Release
+
+# Cutting a release is one tagged run: test the project, build the pinned
+# Windows bundle, smoke-test it, assemble the reviewable assets, and attach
+# them to a draft GitHub Release. Publishing stays a manual review step.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  release:
+    name: Build and draft the Windows release
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+
+      - name: Set up the pinned Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the pinned release dependencies
+        run: python -m pip install --requirement requirements-release.txt
+
+      - name: Run the unit test suite
+        run: python -m unittest tests.py --verbose
+
+      - name: Build the portable bundle
+        # build-release.ps1 installs the pinned requirements, fetches and
+        # checksum-verifies the pinned FFmpeg build, runs PyInstaller, and
+        # zips the bundle.
+        run: powershell -ExecutionPolicy Bypass -File build-release.ps1
+
+      - name: Verify the bundle was built
+        run: |
+          if (-not (Test-Path "dist/ctrl-shift-mp3/ctrl-shift-mp3.exe")) {
+            throw "Expected dist/ctrl-shift-mp3/ctrl-shift-mp3.exe after the build."
+          }
+
+      - name: Smoke-test the packaged bundle
+        # Launches the built executable from outside the checkout and fails
+        # the release if the frontend, static assets, or bundled FFmpeg do
+        # not come up.
+        run: python smoke_test.py --verbose
+
+      - name: Assemble the release assets
+        run: python package_release.py --tag $env:GITHUB_REF_NAME
+
+      - name: Create the draft release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $zip = "dist/ctrl-shift-mp3-windows-v$version.zip"
+          $checksum = "$zip.sha256"
+          gh release create "$env:GITHUB_REF_NAME" $zip $checksum dist/NOTICES.txt --draft --title "ctrl+shift+mp3 $env:GITHUB_REF_NAME" --notes-file dist/release-notes.md

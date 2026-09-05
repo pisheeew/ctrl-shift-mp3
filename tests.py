@@ -11,14 +11,17 @@ or:
     python tests.py
 """
 
+import hashlib
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import engine
 from engine import Track
 import main
+import package_release
 import server
 from run_orchestration import RunOrchestrator
 
@@ -287,6 +290,89 @@ class TestFfmpegResolution(unittest.TestCase):
     def test_reports_missing_ffmpeg_tools(self):
         with self.assertRaisesRegex(RuntimeError, "ffmpeg and ffprobe"):
             engine.resolve_ffmpeg_location(r"C:\missing", lambda _: None)
+
+
+class TestPackageRelease(unittest.TestCase):
+    """Release packaging mechanics behind the tag-triggered workflow:
+    tag parsing, the versioned ZIP name, the checksum file, third-party
+    notices, and the draft release notes."""
+
+    def test_parse_tag_strips_v_prefix(self):
+        self.assertEqual(package_release.parse_tag("v1.0.0"), "1.0.0")
+        self.assertEqual(package_release.parse_tag("v0.2"), "0.2")
+
+    def test_parse_tag_rejects_non_version_tags(self):
+        for tag in ("1.0.0", "release-1", "v", "v1.x", "v1..0"):
+            with self.subTest(tag=tag):
+                with self.assertRaises(ValueError):
+                    package_release.parse_tag(tag)
+
+    def test_release_pins_come_from_the_release_files(self):
+        python_pins, ffmpeg_pins = package_release.load_release_pins()
+        self.assertIn(("flask", "3.1.2"), python_pins)
+        self.assertIn(("yt-dlp", "2025.8.27"), python_pins)
+        self.assertIn(("rapidfuzz", "3.13.0"), python_pins)
+        self.assertIn(("spotipy", "2.25.1"), python_pins)
+        # PyInstaller is build tooling, not something the bundle ships.
+        self.assertFalse(any(name == "pyinstaller" for name, _ in python_pins))
+        self.assertEqual(ffmpeg_pins["version"], "7.1.1")
+        self.assertEqual(ffmpeg_pins["sha256"],
+                         "d1e01af698b98f3bec540bc6db366efd45d794f307d67ab97dbf4eab96e4c20a")
+        self.assertEqual(
+            ffmpeg_pins["url"],
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
+            "autobuild-2025-08-31-13-00/ffmpeg-n7.1.1-57-g1b48158a23-win64-gpl-7.1.zip",
+        )
+
+    def test_assemble_release_renames_zip_and_writes_checksum(self):
+        with tempfile.TemporaryDirectory() as dist:
+            payload = b"not really a zip"
+            (Path(dist) / "ctrl-shift-mp3-7.1.1-win64.zip").write_bytes(payload)
+            assets = package_release.assemble_release("v1.2.3", dist_dir=Path(dist))
+            self.assertEqual(assets["zip"].name, "ctrl-shift-mp3-windows-v1.2.3.zip")
+            self.assertTrue(assets["zip"].is_file())
+            expected = hashlib.sha256(payload).hexdigest()
+            self.assertEqual(
+                assets["checksum"].read_text(encoding="utf-8").strip(),
+                f"{expected}  ctrl-shift-mp3-windows-v1.2.3.zip",
+            )
+            self.assertTrue(assets["notices"].is_file())
+            self.assertTrue(assets["notes"].is_file())
+
+    def test_assemble_release_rejects_missing_built_zip(self):
+        with tempfile.TemporaryDirectory() as dist:
+            with self.assertRaises(RuntimeError):
+                package_release.assemble_release("v1.2.3", dist_dir=Path(dist))
+
+    def test_notices_cover_python_pins_and_ffmpeg_source(self):
+        _, ffmpeg_pins = package_release.load_release_pins()
+        with tempfile.TemporaryDirectory() as dist:
+            notices = Path(dist) / "NOTICES.txt"
+            package_release.write_notices(notices, ffmpeg_pins)
+            text = notices.read_text(encoding="utf-8")
+        self.assertIn("flask", text.lower())
+        self.assertIn("3.1.2", text)
+        self.assertIn("yt-dlp", text.lower())
+        self.assertIn("BtbN/FFmpeg-Builds", text)
+        self.assertIn(ffmpeg_pins["sha256"], text)
+        self.assertIn("General Public License", text)
+
+    def test_release_notes_cover_required_guidance(self):
+        with tempfile.TemporaryDirectory() as dist:
+            notes = Path(dist) / "release-notes.md"
+            package_release.write_release_notes(
+                notes,
+                version="1.2.3",
+                zip_name="ctrl-shift-mp3-windows-v1.2.3.zip",
+                checksum="abc123",
+                ffmpeg_version="7.1.1",
+            )
+            text = notes.read_text(encoding="utf-8")
+        for expected in ("extract", "ctrl-shift-mp3.exe", "smartscreen",
+                         "sha-256", "abc123", "http://127.0.0.1", "--debug",
+                         "notices.txt", "right to use"):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, text.lower())
 
 
 if __name__ == "__main__":
