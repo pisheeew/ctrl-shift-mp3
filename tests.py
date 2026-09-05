@@ -394,8 +394,8 @@ class TestSetVersion(unittest.TestCase):
     """Executable metadata stamping: the tag version must reach
     version_info.txt so the exe, ZIP name, and release notes agree."""
 
-    def _copy_template(self, dist: str) -> Path:
-        target = Path(dist) / "version_info.txt"
+    def _copy_template(self, tmp: str) -> Path:
+        target = Path(tmp) / "version_info.txt"
         target.write_text(
             (Path(__file__).parent / "version_info.txt").read_text(encoding="utf-8"),
             encoding="utf-8",
@@ -403,8 +403,8 @@ class TestSetVersion(unittest.TestCase):
         return target
 
     def test_stamp_version_updates_metadata_fields(self):
-        with tempfile.TemporaryDirectory() as dist:
-            info = self._copy_template(dist)
+        with tempfile.TemporaryDirectory() as tmp:
+            info = self._copy_template(tmp)
             set_version.stamp_version_info(info, (1, 2, 3))
             text = info.read_text(encoding="utf-8")
         self.assertIn("filevers=(1, 2, 3, 0)", text)
@@ -415,8 +415,8 @@ class TestSetVersion(unittest.TestCase):
         self.assertIn("StringStruct('OriginalFilename', 'ctrl-shift-mp3.exe')", text)
 
     def test_stamp_version_is_idempotent(self):
-        with tempfile.TemporaryDirectory() as dist:
-            info = self._copy_template(dist)
+        with tempfile.TemporaryDirectory() as tmp:
+            info = self._copy_template(tmp)
             set_version.stamp_version_info(info, (2, 0, 1))
             once = info.read_text(encoding="utf-8")
             set_version.stamp_version_info(info, (2, 0, 1))
@@ -427,15 +427,15 @@ class TestSetVersion(unittest.TestCase):
             set_version.stamp_version_from_tag("v1.x", Path("unused"))
 
     def test_stamp_version_rejects_unexpected_template(self):
-        with tempfile.TemporaryDirectory() as dist:
-            info = Path(dist) / "version_info.txt"
+        with tempfile.TemporaryDirectory() as tmp:
+            info = Path(tmp) / "version_info.txt"
             info.write_text("filevers=(1, 0, 0, 0),\n", encoding="utf-8")
             with self.assertRaises(RuntimeError):
                 set_version.stamp_version_info(info, (1, 2, 3))
 
     def test_stamp_version_from_tag_parses_and_writes(self):
-        with tempfile.TemporaryDirectory() as dist:
-            info = self._copy_template(dist)
+        with tempfile.TemporaryDirectory() as tmp:
+            info = self._copy_template(tmp)
             set_version.stamp_version_from_tag("v4.5.6", info)
             text = info.read_text(encoding="utf-8")
         self.assertIn("filevers=(4, 5, 6, 0)", text)

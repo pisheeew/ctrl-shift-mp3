@@ -24,7 +24,7 @@ from package_release import parse_tag
 REPO_ROOT = Path(__file__).resolve().parent
 
 
-def _replace(template: str, pattern: str, replacement: str, what: str) -> str:
+def _replace_exactly_once(template: str, pattern: str, replacement: str, what: str) -> str:
     updated, count = re.subn(pattern, replacement, template)
     if count != 1:
         raise RuntimeError(
@@ -55,7 +55,7 @@ def stamp_version_info(info_path: Path, version: tuple[int, int, int]) -> Path:
          f"StringStruct('ProductVersion', '{dotted}')"),
     ]
     for what, pattern, replacement in fields:
-        text = _replace(text, pattern, replacement, what)
+        text = _replace_exactly_once(text, pattern, replacement, what)
 
     info_path.write_text(text, encoding="utf-8")
     return info_path

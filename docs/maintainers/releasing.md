@@ -38,7 +38,9 @@ Publishing is always a manual step. The workflow creates the release as a
    ```
 
    Tags must match `v<major>.<minor>.<patch>` (for example `v1.0.0`);
-   `package_release.py` rejects anything else before any asset is uploaded.
+   `set_version.py` rejects anything else within the first minute of the
+   run, and `package_release.py` enforces the same format again before any
+   asset is uploaded.
 
 3. The **Release** workflow
    ([`.github/workflows/release.yml`](../../.github/workflows/release.yml))
