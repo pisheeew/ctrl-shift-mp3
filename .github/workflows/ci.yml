@@ -2,14 +2,16 @@ name: CI
 
 # Every push to main and every pull request runs the unit suite, so broken
 # commits never land unnoticed and external contributors get fast feedback.
-# Read-only job: the tests are pure logic and need no token scopes.
+# Read-only job: contents: read is the minimum the token needs to clone this
+# private repo, and it grants nothing writable.
 on:
   push:
     branches:
       - main
   pull_request:
 
-permissions: {}
+permissions:
+  contents: read
 
 defaults:
   run:
