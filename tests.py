@@ -280,9 +280,12 @@ class TestPackagedStartup(unittest.TestCase):
 
 class TestFfmpegResolution(unittest.TestCase):
     def test_prefers_bundled_ffmpeg_directory(self):
+        # Use the filenames resolve_ffmpeg_location looks for on this
+        # platform, so the test passes on both Windows and Linux CI.
+        names = ("ffmpeg.exe", "ffprobe.exe") if os.name == "nt" else ("ffmpeg", "ffprobe")
         with tempfile.TemporaryDirectory() as bundle:
-            open(os.path.join(bundle, "ffmpeg.exe"), "w").close()
-            open(os.path.join(bundle, "ffprobe.exe"), "w").close()
+            for name in names:
+                open(os.path.join(bundle, name), "w").close()
             self.assertEqual(engine.resolve_ffmpeg_location(bundle, lambda _: None), bundle)
 
     def test_falls_back_to_path(self):
