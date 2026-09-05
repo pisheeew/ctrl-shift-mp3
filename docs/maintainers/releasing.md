@@ -107,8 +107,9 @@ python package_release.py --tag v1.2.3                        # versioned ZIP + 
 `build-release.ps1` produces the raw bundle ZIP under its FFmpeg-derived name
 (`dist\ctrl-shift-mp3-7.1.1-win64.zip`); `package_release.py` copies
 `NOTICES.txt` into the bundle directory and rebuilds it as the versioned
-release ZIP, then generates the remaining assets. The local result should be
-equivalent to the CI artifact apart from build timestamps.
+release ZIP, then generates the remaining assets. A local rebuild should be
+functionally equivalent to the CI artifact, though PyInstaller output is not
+byte-reproducible.
 
 ## Updating pinned dependencies deliberately
 

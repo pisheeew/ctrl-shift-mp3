@@ -331,7 +331,6 @@ class TestPackageRelease(unittest.TestCase):
             bundle = Path(dist) / "ctrl-shift-mp3"
             bundle.mkdir()
             (bundle / "ctrl-shift-mp3.exe").write_bytes(b"MZ fake exe")
-            (Path(dist) / "ctrl-shift-mp3-7.1.1-win64.zip").write_bytes(b"raw build zip")
             assets = package_release.assemble_release("v1.2.3", dist_dir=Path(dist))
             self.assertEqual(assets["zip"].name, "ctrl-shift-mp3-windows-v1.2.3.zip")
             self.assertTrue(assets["zip"].is_file())
@@ -353,7 +352,7 @@ class TestPackageRelease(unittest.TestCase):
 
     def test_assemble_release_rejects_missing_built_bundle(self):
         with tempfile.TemporaryDirectory() as dist:
-            with self.assertRaises(RuntimeError):
+            with self.assertRaisesRegex(RuntimeError, "built bundle directory"):
                 package_release.assemble_release("v1.2.3", dist_dir=Path(dist))
 
     def test_notices_cover_python_pins_and_ffmpeg_source(self):

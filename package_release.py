@@ -43,7 +43,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
-_BUILT_ZIP_GLOB = "ctrl-shift-mp3-*-win64.zip"
 _BUNDLE_DIR_NAME = "ctrl-shift-mp3"
 _TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 _REQUIREMENT_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[^\s#]+)")
@@ -357,24 +356,21 @@ def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
     """
     Turn the built bundle in *dist_dir* into the draft-release assets.
 
-    Requires the PyInstaller bundle directory (dist/ctrl-shift-mp3) and the
-    raw bundle ZIP that build-release.ps1 leaves beside it, as evidence of a
-    finished build. The third-party notices are generated, attached to the
-    release as NOTICES.txt, and copied into the bundle before the versioned
-    ZIP is rebuilt from the bundle directory — the license notices travel
-    with the redistributed binaries, not just beside them.
+    Requires the PyInstaller bundle directory (dist/ctrl-shift-mp3) that
+    build-release.ps1 leaves behind. The third-party notices are generated,
+    attached to the release as NOTICES.txt, and copied into the bundle before
+    the versioned ZIP is rebuilt from the bundle directory — the license
+    notices travel with the redistributed binaries, not just beside them.
 
     Returns the paths of the versioned ZIP, its checksum file, the notices,
     the draft release notes, and the release-assets list.
     """
     version = parse_tag(tag)
     bundle_dir = dist_dir / _BUNDLE_DIR_NAME
-    built = sorted(dist_dir.glob(_BUILT_ZIP_GLOB))
-    if not bundle_dir.is_dir() or len(built) != 1:
+    if not bundle_dir.is_dir():
         raise RuntimeError(
-            f"Expected the built bundle directory {bundle_dir} and exactly one "
-            f"built {_BUILT_ZIP_GLOB} in {dist_dir} after build-release.ps1; "
-            f"found {len(built)} ZIP(s)."
+            f"Expected the built bundle directory {bundle_dir} after "
+            "build-release.ps1; run the build first."
         )
 
     python_pins, ffmpeg_pins = load_release_pins()
@@ -413,10 +409,12 @@ def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Assemble draft-release assets from the built bundle ZIP.")
+    parser = argparse.ArgumentParser(
+        description="Assemble draft-release assets from the built portable bundle."
+    )
     parser.add_argument("--tag", required=True, help="release tag, e.g. v1.0.0")
     parser.add_argument("--dist-dir", default=str(REPO_ROOT / "dist"),
-                        help="directory containing the built ZIP (default: dist)")
+                        help="directory containing the built bundle (default: dist)")
     args = parser.parse_args(argv)
     try:
         assets = assemble_release(args.tag, dist_dir=Path(args.dist_dir))

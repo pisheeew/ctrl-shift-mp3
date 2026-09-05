@@ -18,7 +18,7 @@ on your machine and opens a terminal-styled interface in your browser.
 | Audio source   | Matching YouTube videos via `yt-dlp`                         |
 | Output         | Tagged MP3 files with cover art                              |
 | Interface      | Local browser UI with live progress updates                  |
-| Required tools | Nothing extra for the Windows release (Python and FFmpeg are bundled); from source, see [Run from source](#quick-start-from-source-youtube-playlist) |
+| Required tools | None for the [Windows release](#download-for-windows); Python + `ffmpeg` from source |
 | Network access | Spotify API and YouTube are contacted during scans/downloads |
 
 ## Use responsibly
@@ -36,9 +36,9 @@ Python, dependencies, FFmpeg, frontend assets, and native dialog resources.
 No installation is required.
 
 1. On the [Releases page](https://github.com/pisheeew/ctrl-shift-mp3/releases),
-   download `ctrl-shift-mp3-windows-v<version>.zip`, the matching
-   `ctrl-shift-mp3-windows-v<version>.zip.sha256` checksum file, and
-   `NOTICES.txt`.
+   download `ctrl-shift-mp3-windows-v<version>.zip` and the matching
+   `ctrl-shift-mp3-windows-v<version>.zip.sha256` checksum file. (A copy of
+   `NOTICES.txt` is attached to the release and also ships inside the ZIP.)
 2. Verify the download (see [Verify the checksum](#verify-the-checksum)
    below).
 3. Extract the ZIP to any folder you like.
