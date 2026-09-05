@@ -15,6 +15,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -299,10 +300,11 @@ class TestPackageRelease(unittest.TestCase):
 
     def test_parse_tag_strips_v_prefix(self):
         self.assertEqual(package_release.parse_tag("v1.0.0"), "1.0.0")
-        self.assertEqual(package_release.parse_tag("v0.2"), "0.2")
+        self.assertEqual(package_release.parse_tag("v10.20.30"), "10.20.30")
 
     def test_parse_tag_rejects_non_version_tags(self):
-        for tag in ("1.0.0", "release-1", "v", "v1.x", "v1..0"):
+        for tag in ("1.0.0", "release-1", "v", "v1.x", "v1..0",
+                    "v0.2", "v1.2.3.4", "v1.0.0-beta"):
             with self.subTest(tag=tag):
                 with self.assertRaises(ValueError):
                     package_release.parse_tag(tag)
@@ -324,25 +326,32 @@ class TestPackageRelease(unittest.TestCase):
             "autobuild-2025-08-31-13-00/ffmpeg-n7.1.1-57-g1b48158a23-win64-gpl-7.1.zip",
         )
 
-    def test_assemble_release_renames_zip_and_writes_checksum(self):
+    def test_assemble_release_builds_versioned_zip_with_notices_inside(self):
         with tempfile.TemporaryDirectory() as dist:
-            payload = b"not really a zip"
-            (Path(dist) / "ctrl-shift-mp3-7.1.1-win64.zip").write_bytes(payload)
+            bundle = Path(dist) / "ctrl-shift-mp3"
+            bundle.mkdir()
+            (bundle / "ctrl-shift-mp3.exe").write_bytes(b"MZ fake exe")
+            (Path(dist) / "ctrl-shift-mp3-7.1.1-win64.zip").write_bytes(b"raw build zip")
             assets = package_release.assemble_release("v1.2.3", dist_dir=Path(dist))
             self.assertEqual(assets["zip"].name, "ctrl-shift-mp3-windows-v1.2.3.zip")
             self.assertTrue(assets["zip"].is_file())
-            expected = hashlib.sha256(payload).hexdigest()
+            with zipfile.ZipFile(assets["zip"]) as archive:
+                names = archive.namelist()
+                self.assertIn("ctrl-shift-mp3.exe", names)
+                self.assertIn("NOTICES.txt", names)
+            self.assertEqual((bundle / "NOTICES.txt").read_bytes(),
+                             assets["notices"].read_bytes())
+            digest = hashlib.sha256(assets["zip"].read_bytes()).hexdigest()
             self.assertEqual(
                 assets["checksum"].read_text(encoding="utf-8").strip(),
-                f"{expected}  ctrl-shift-mp3-windows-v1.2.3.zip",
+                f"{digest}  ctrl-shift-mp3-windows-v1.2.3.zip",
             )
-            self.assertTrue(assets["notices"].is_file())
             self.assertTrue(assets["notes"].is_file())
             assets_list = assets["assets_list"].read_text(encoding="utf-8").splitlines()
             self.assertEqual(assets_list,
                              [str(assets["zip"]), str(assets["checksum"]), str(assets["notices"])])
 
-    def test_assemble_release_rejects_missing_built_zip(self):
+    def test_assemble_release_rejects_missing_built_bundle(self):
         with tempfile.TemporaryDirectory() as dist:
             with self.assertRaises(RuntimeError):
                 package_release.assemble_release("v1.2.3", dist_dir=Path(dist))

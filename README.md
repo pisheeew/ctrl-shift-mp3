@@ -18,7 +18,7 @@ on your machine and opens a terminal-styled interface in your browser.
 | Audio source   | Matching YouTube videos via `yt-dlp`                         |
 | Output         | Tagged MP3 files with cover art                              |
 | Interface      | Local browser UI with live progress updates                  |
-| Required tools | Python, project dependencies, and `ffmpeg` (release bundles these) |
+| Required tools | Nothing extra for the Windows release (Python and FFmpeg are bundled); from source, see [Run from source](#quick-start-from-source-youtube-playlist) |
 | Network access | Spotify API and YouTube are contacted during scans/downloads |
 
 ## Use responsibly
@@ -29,7 +29,72 @@ Downloading copyrighted material without permission may violate platform terms
 or local law. You are responsible for how you use this project. See
 [LICENSE](LICENSE) for the warranty disclaimer.
 
-## Quick start: YouTube playlist
+## Download for Windows
+
+The portable release is one ZIP that contains everything the app needs —
+Python, dependencies, FFmpeg, frontend assets, and native dialog resources.
+No installation is required.
+
+1. On the [Releases page](https://github.com/pisheeew/ctrl-shift-mp3/releases),
+   download `ctrl-shift-mp3-windows-v<version>.zip`, the matching
+   `ctrl-shift-mp3-windows-v<version>.zip.sha256` checksum file, and
+   `NOTICES.txt`.
+2. Verify the download (see [Verify the checksum](#verify-the-checksum)
+   below).
+3. Extract the ZIP to any folder you like.
+4. Double-click `ctrl-shift-mp3.exe` (or run it from a terminal).
+
+A console window opens and stays open while the app runs. It prints the
+local URL and tries to open your default browser at
+<http://127.0.0.1:8743/>. If that port is busy, the app picks another free
+localhost port and prints the URL it is actually using. If the browser does
+not open by itself, type the printed URL into your browser manually. Stop
+the app with `Ctrl+C` in the console window; closing the browser tab does
+not stop it.
+
+For Flask diagnostic output, run `ctrl-shift-mp3.exe --debug` from a
+terminal.
+
+### Expected Windows warning on first launch
+
+The release is not code-signed, so Windows SmartScreen may show
+"Windows protected your PC". Click **More info** → **Run anyway**. Only run
+executables downloaded from this project's GitHub Releases page, and verify
+the checksum first.
+
+### Verify the checksum
+
+The `.sha256` file published beside each release contains the expected
+SHA-256 digest of the ZIP. In PowerShell, from the folder holding the
+download:
+
+```powershell
+Get-FileHash .\ctrl-shift-mp3-windows-v1.0.0.zip -Algorithm SHA256
+```
+
+Compare the printed digest with the one recorded in the `.sha256` file (or
+in the release notes). They must match exactly, ignoring case. If they
+differ, the download was corrupted or altered — delete it and download
+again.
+
+### What the release includes
+
+- **Bundled FFmpeg.** `ffmpeg.exe` and `ffprobe.exe` ship inside the bundle
+  and are used automatically for audio conversion and cover-art embedding.
+  If the bundled binaries are unavailable, the app falls back to `ffmpeg`
+  on `PATH`.
+- **Your data stays in place.** The packaged app reads and writes the same
+  home-directory files as a source checkout — settings, Spotify
+  credentials, session state, match cache, and log. See
+  [Local data and privacy](#local-data-and-privacy).
+- **Local-only network posture.** The server binds to `127.0.0.1` only.
+  Like the source version, it is unauthenticated: run it only on a machine
+  and network you trust.
+- **Third-party notices.** `NOTICES.txt` lists the bundled Python packages
+  and the bundled FFmpeg build with their licenses, including the retained
+  GPL text that covers FFmpeg redistribution.
+
+## Quick start from source: YouTube playlist
 
 YouTube playlist links do not require Spotify credentials.
 
@@ -56,9 +121,9 @@ python -m pip install -r requirements.txt
 ```
 
 Install `ffmpeg` separately and make sure both `ffmpeg` and `ffprobe` are
-available on your system `PATH`. A packaged release checks its bundled
-executables first, then falls back to `PATH`. They are needed for audio
-conversion and cover-art embedding.
+available on your system `PATH`. They are needed for audio conversion and
+cover-art embedding. A packaged release checks its bundled executables
+first, then falls back to `PATH`.
 
 ### 2. Start the app
 
@@ -71,20 +136,6 @@ localhost port if needed. It prints the actual URL and attempts to open your
 default browser. Keep the process running while you use the app. Close the
 server with `Ctrl+C`; closing the browser tab does not stop it. Use
 `python main.py --debug` for Flask diagnostic output.
-
-### Build a portable Windows release
-
-From a Windows PowerShell prompt, run:
-
-```powershell
-.\build-release.ps1
-```
-
-The script installs the exact versions in `requirements-release.txt`, downloads
-the pinned FFmpeg 7.1.1 BtbN win64 GPL archive, and creates
-`dist\ctrl-shift-mp3-7.1.1-win64.zip`. Extract that ZIP and run
-`ctrl-shift-mp3.exe`; Python, FFmpeg, frontend assets, and native dialog
-resources are included.
 
 ### 3. Scan and download
 
@@ -114,7 +165,9 @@ the Client Credentials flow and does not use an interactive Spotify login.
 
 ## Local data and privacy
 
-The app stores its state in your home directory, not in this repository:
+The app stores its state in your home directory — never in the repository
+or the extracted release folder. These locations are the same whether you
+run from source or from a packaged release:
 
 - `~/.playlist_downloader_config.json` stores settings and Spotify credentials.
   The file is plaintext and should be protected from other local processes.
@@ -129,6 +182,12 @@ credentials file with `chmod 600 ~/.playlist_downloader_config.json`.
 
 ## Troubleshooting
 
+### Windows shows "Windows protected your PC"
+
+The release executable is not code-signed. Click **More info** →
+**Run anyway**, after verifying the download checksum. See
+[Expected Windows warning on first launch](#expected-windows-warning-on-first-launch).
+
 ### `ffmpeg` is not found
 
 Install both `ffmpeg` and `ffprobe`, add their executable directory to `PATH`,
@@ -140,8 +199,10 @@ Packaged releases check their bundled executables first, then fall back to
 
 ### The browser does not open
 
-Open <http://127.0.0.1:8743/> manually. If the page still does not load, check
-the terminal for startup errors and confirm that the port is available.
+Check the console window (or terminal) for the URL the app printed — if
+port 8743 was busy, the app selected another port and the URL differs from
+the default. Open that printed URL manually. If the page still does not
+load, check the console for startup errors.
 
 ### A scan returns no tracks
 
@@ -192,7 +253,15 @@ The local server is unauthenticated and should only be run on a machine and
 network you trust. It binds to `127.0.0.1` and includes origin checks, output
 path validation, formula-safe CSV export, and guards against overlapping runs.
 
+### Release engineering
+
+To build the portable Windows bundle locally, or to cut and review a tagged
+release, see the maintainer guide:
+[docs/maintainers/releasing.md](docs/maintainers/releasing.md).
+
 ## License
 
 This project is available under the [MIT License](LICENSE). Flask, `yt-dlp`,
-RapidFuzz, and Spotipy remain subject to their own licenses.
+RapidFuzz, and Spotipy remain subject to their own licenses. The Windows
+release ships `NOTICES.txt` with the full third-party inventory, including
+the GPL terms that cover redistribution of the bundled FFmpeg build.

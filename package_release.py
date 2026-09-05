@@ -7,7 +7,9 @@ dist/ (the tag-triggered GitHub workflow does exactly that):
 
     python package_release.py --tag v1.0.0
 
-It turns the single built ZIP into the reviewable draft-release set:
+It turns the built bundle into the reviewable draft-release set (NOTICES.txt
+is also placed inside the bundle, and the versioned ZIP is rebuilt from the
+bundle directory so the notices travel with the binaries):
 
   ctrl-shift-mp3-windows-v1.0.0.zip          the versioned portable ZIP
   ctrl-shift-mp3-windows-v1.0.0.zip.sha256   SHA-256 checksum (sha256sum format)
@@ -34,13 +36,16 @@ import argparse
 import hashlib
 import importlib.metadata
 import re
+import shutil
 import sys
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
 _BUILT_ZIP_GLOB = "ctrl-shift-mp3-*-win64.zip"
-_TAG_RE = re.compile(r"^v(?P<version>\d+(?:\.\d+)+)$")
+_BUNDLE_DIR_NAME = "ctrl-shift-mp3"
+_TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 _REQUIREMENT_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[^\s#]+)")
 _BUILD_ONLY_PACKAGES = {"pyinstaller"}
 _LICENSE_FILE_RE = re.compile(r"^(licen[cs]e|copying|notice)", re.IGNORECASE)
@@ -53,7 +58,7 @@ def parse_tag(tag: str) -> str:
     if not match:
         raise ValueError(
             f"Tag {tag!r} is not a version tag like v1.0.0 "
-            "(expected 'v' followed by dotted numbers)."
+            "(expected v<major>.<minor>.<patch>)."
         )
     return match.group("version")
 
@@ -339,23 +344,45 @@ included in the bundle as `LICENSE`.
     return path
 
 
+def _zip_bundle(bundle_dir: Path, zip_path: Path) -> None:
+    """Zip the contents of *bundle_dir* into *zip_path*, rooted at the top
+    level like Compress-Archive (the bundle's children become the ZIP's
+    children)."""
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for entry in sorted(bundle_dir.rglob("*")):
+            archive.write(entry, entry.relative_to(bundle_dir).as_posix())
+
+
 def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
     """
-    Turn the built bundle ZIP in *dist_dir* into the draft-release assets.
+    Turn the built bundle in *dist_dir* into the draft-release assets.
 
-    Returns the paths of the versioned ZIP, its checksum file, the third-party
-    notices, and the draft release notes.
+    Requires the PyInstaller bundle directory (dist/ctrl-shift-mp3) and the
+    raw bundle ZIP that build-release.ps1 leaves beside it, as evidence of a
+    finished build. The third-party notices are generated, attached to the
+    release as NOTICES.txt, and copied into the bundle before the versioned
+    ZIP is rebuilt from the bundle directory — the license notices travel
+    with the redistributed binaries, not just beside them.
+
+    Returns the paths of the versioned ZIP, its checksum file, the notices,
+    the draft release notes, and the release-assets list.
     """
     version = parse_tag(tag)
+    bundle_dir = dist_dir / _BUNDLE_DIR_NAME
     built = sorted(dist_dir.glob(_BUILT_ZIP_GLOB))
-    if len(built) != 1:
+    if not bundle_dir.is_dir() or len(built) != 1:
         raise RuntimeError(
-            f"Expected exactly one built {_BUILT_ZIP_GLOB} in {dist_dir}, "
-            f"found {len(built)}: {[path.name for path in built]}"
+            f"Expected the built bundle directory {bundle_dir} and exactly one "
+            f"built {_BUILT_ZIP_GLOB} in {dist_dir} after build-release.ps1; "
+            f"found {len(built)} ZIP(s)."
         )
 
+    python_pins, ffmpeg_pins = load_release_pins()
+    notices_path = write_notices(dist_dir / "NOTICES.txt", python_pins, ffmpeg_pins)
+    shutil.copyfile(notices_path, bundle_dir / "NOTICES.txt")
+
     zip_path = dist_dir / f"ctrl-shift-mp3-windows-v{version}.zip"
-    built[0].replace(zip_path)
+    _zip_bundle(bundle_dir, zip_path)
 
     digest = hashlib.sha256()
     with zip_path.open("rb") as stream:
@@ -365,8 +392,6 @@ def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
     checksum_path = zip_path.with_name(zip_path.name + ".sha256")
     checksum_path.write_text(f"{checksum}  {zip_path.name}\n", encoding="utf-8")
 
-    python_pins, ffmpeg_pins = load_release_pins()
-    notices_path = write_notices(dist_dir / "NOTICES.txt", python_pins, ffmpeg_pins)
     notes_path = write_release_notes(
         dist_dir / "release-notes.md",
         version=version,
@@ -380,7 +405,7 @@ def assemble_release(tag: str, dist_dir: Path) -> dict[str, Path]:
     # names, so there is one place that owns the asset paths.
     assets_list_path = dist_dir / "release-assets.txt"
     assets_list_path.write_text(
-        "\n".join(str(p) for p in (zip_path, checksum_path, notices_path)) + "\n",
+        "\n".join(str(path) for path in (zip_path, checksum_path, notices_path)) + "\n",
         encoding="utf-8",
     )
     return {"zip": zip_path, "checksum": checksum_path, "notices": notices_path,
