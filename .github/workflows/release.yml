@@ -3,15 +3,25 @@ name: Release
 # Cutting a release is one tagged run: test the project, build the pinned
 # Windows bundle, smoke-test it, assemble the reviewable assets, and attach
 # them to a draft GitHub Release. Publishing stays a manual review step.
-# The pattern pre-filters to digit-led tags (vfoo never runs); the dotted
-# v<major>.<minor>.<patch> form is enforced by package_release.py.
+# A failed run (flaky smoke test, transient FFmpeg fetch) can also be re-run
+# manually via workflow_dispatch, passing the same tag as the input; an empty
+# input falls back to the triggering ref. The tag pattern pre-filters to
+# digit-led tags (vfoo never runs); the dotted v<major>.<minor>.<patch> form
+# is enforced by package_release.py.
 on:
   push:
     tags:
       - "v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (v<major>.<minor>.<patch>); empty uses the triggering ref"
+        required: false
+        default: ""
 
-permissions:
-  contents: write
+# Deny everything at the workflow level; the release job grants itself only
+# what gh release create needs.
+permissions: {}
 
 defaults:
   run:
@@ -22,17 +32,24 @@ jobs:
     name: Build and draft the Windows release
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
     env:
+      # On a tag push this is the tag; on workflow_dispatch it is the input
+      # (GITHUB_REF_NAME would name the branch the run was dispatched from).
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
     steps:
       - name: Check out the release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Stamp the executable version from the tag
         # Rewrites version_info.txt in the working tree so the exe metadata
         # matches the tag, the ZIP name, and the generated release notes.
         # Also fails the run fast if the tag is not v<major>.<minor>.<patch>.
-        run: python set_version.py --tag $env:GITHUB_REF_NAME
+        run: python set_version.py --tag $env:RELEASE_TAG
 
       - name: Set up the pinned Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -67,7 +84,7 @@ jobs:
         run: python smoke_test.py --verbose
 
       - name: Assemble the release assets
-        run: python package_release.py --tag $env:GITHUB_REF_NAME
+        run: python package_release.py --tag $env:RELEASE_TAG
 
       - name: Create the draft release
         # package_release.py wrote dist/release-assets.txt: the versioned ZIP,
@@ -76,4 +93,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           $assets = Get-Content dist/release-assets.txt
-          gh release create "$env:GITHUB_REF_NAME" $assets --draft --title "ctrl+shift+mp3 $env:GITHUB_REF_NAME" --notes-file dist/release-notes.md
+          gh release create "$env:RELEASE_TAG" $assets --draft --title "ctrl+shift+mp3 $env:RELEASE_TAG" --notes-file dist/release-notes.md
