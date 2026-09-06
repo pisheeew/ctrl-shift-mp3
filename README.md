@@ -176,15 +176,18 @@ or the extracted release folder. These locations are the same whether you
 run from source or from a packaged release:
 
 - `~/.playlist_downloader_config.json` stores settings and Spotify credentials.
-  The file is plaintext and should be protected from other local processes.
-  The app masks the saved secret in the browser and does not send it back on
-  page load.
+  On Windows the credentials are encrypted with DPAPI (bound to your user
+  account), so the file is unreadable to other local users and to copies taken
+  off the machine; configs written by older versions are plaintext and are
+  encrypted the next time you save settings. The app masks the saved secret in
+  the browser and does not send it back on page load.
 - `~/.playlist_downloader_session.json` stores the last queue and track state.
 - `~/.playlist_downloader_match_cache.json` caches YouTube matches.
 - `~/.playlist_downloader.log` stores the run log.
 
-These files are covered by `.gitignore`. On macOS/Linux, you can restrict the
-credentials file with `chmod 600 ~/.playlist_downloader_config.json`.
+These files are covered by `.gitignore`. On macOS/Linux the credentials file
+gets `chmod 600` automatically whenever settings are saved; you can also
+apply it manually with `chmod 600 ~/.playlist_downloader_config.json`.
 
 ## Troubleshooting
 

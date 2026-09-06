@@ -27,7 +27,9 @@ Endpoints (all under /api/):
 
 from __future__ import annotations
 
+import base64
 import concurrent.futures
+import ctypes
 import json
 import logging
 import os
@@ -101,19 +103,108 @@ def load_config() -> dict:
                 cfg.update(json.load(f))
         except Exception:
             log.exception("Failed to load config from %s", CONFIG_PATH)
-    return cfg
+    return _restore_config_secrets(cfg)
 
 
 def save_config(cfg: dict) -> Optional[str]:
     try:
+        protected = _protect_config_secrets(cfg)
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
+            json.dump(protected, f, indent=2)
+        if os.name == "posix":
+            try:
+                os.chmod(CONFIG_PATH, 0o600)
+            except OSError:
+                log.exception("Failed to restrict permissions on %s", CONFIG_PATH)
         return None
     except Exception:
         # SEC-007: log full detail (including the path) server-side only;
         # the client only gets a generic message.
         log.exception("Failed to save config to %s", CONFIG_PATH)
         return "Could not save settings. Check the app log for details."
+
+
+# ---------------------------------------------------------------------- #
+# Credentials at rest (ADR-0003 follow-up)
+#
+# On Windows the secret-bearing config fields are encrypted with DPAPI
+# (CryptProtectData, current-user scope) before they touch disk and
+# decrypted on load, so file copies taken off the machine are unreadable
+# and other local users cannot decrypt them. Encrypted values carry a
+# "dpapi:" prefix; values without it (configs written by prior versions)
+# load as plaintext and are encrypted on their next save. In-memory config
+# always holds plaintext, so the SEC-005 secret masking is unaffected.
+# ---------------------------------------------------------------------- #
+SECRET_CONFIG_FIELDS = ("spotify_client_id", "spotify_client_secret")
+_DPAPI_PREFIX = "dpapi:"
+_CRYPTPROTECT_UI_FORBIDDEN = 0x1
+
+_crypt32 = ctypes.WinDLL("crypt32", use_last_error=True) if sys.platform == "win32" else None
+
+
+class _DataBlob(ctypes.Structure):
+    _fields_ = [
+        ("cbData", ctypes.c_ulong),
+        ("pbData", ctypes.POINTER(ctypes.c_char)),
+    ]
+
+
+def _dpapi_call(func, data: bytes) -> bytes:
+    blob_in = _DataBlob(
+        len(data),
+        ctypes.cast(ctypes.create_string_buffer(data, len(data)),
+                    ctypes.POINTER(ctypes.c_char)),
+    )
+    blob_out = _DataBlob()
+    if not func(ctypes.byref(blob_in), None, None, None, None,
+                _CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(blob_out)):
+        raise OSError(f"{func.__name__} failed (error {ctypes.get_last_error()})")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+
+def _encrypt_config_value(value: str) -> str:
+    if _crypt32 is None:
+        # No DPAPI outside Windows; keep the historical plaintext behavior
+        # (chmod 600 on POSIX is applied by save_config instead).
+        log.info("Credential encryption unavailable on this platform; "
+                 "writing %s unencrypted", CONFIG_PATH)
+        return value
+    cipher = _dpapi_call(_crypt32.CryptProtectData, value.encode("utf-8"))
+    return _DPAPI_PREFIX + base64.b64encode(cipher).decode("ascii")
+
+
+def _decrypt_config_value(value: str) -> str:
+    cipher = base64.b64decode(value[len(_DPAPI_PREFIX):])
+    return _dpapi_call(_crypt32.CryptUnprotectData, cipher).decode("utf-8")
+
+
+def _protect_config_secrets(cfg: dict) -> dict:
+    protected = dict(cfg)
+    for field in SECRET_CONFIG_FIELDS:
+        value = protected.get(field)
+        if isinstance(value, str) and value and not value.startswith(_DPAPI_PREFIX):
+            protected[field] = _encrypt_config_value(value)
+    return protected
+
+
+def _restore_config_secrets(cfg: dict) -> dict:
+    restored = dict(cfg)
+    for field in SECRET_CONFIG_FIELDS:
+        value = restored.get(field)
+        if isinstance(value, str) and value.startswith(_DPAPI_PREFIX):
+            try:
+                restored[field] = _decrypt_config_value(value)
+            except Exception:
+                # Keep the stored value rather than blanking it: the next
+                # save re-persists it unchanged, so a transient failure or
+                # a plaintext secret that happens to carry the prefix
+                # destroys nothing.
+                log.exception("Failed to decrypt %s in %s; using stored value",
+                              field, CONFIG_PATH)
+    return restored
 
 
 def save_session_cache(tracks: list[Track], queue_urls: list[str]) -> None:

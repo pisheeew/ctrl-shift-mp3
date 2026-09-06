@@ -12,7 +12,9 @@ or:
 """
 
 import hashlib
+import json
 import os
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -301,6 +303,89 @@ class TestPackagedStartup(unittest.TestCase):
             with mock.patch.object(main.log, "warning") as warning:
                 main.open_browser("http://127.0.0.1:8743/")
         warning.assert_called_once()
+
+
+class TestCredentialFileProtection(unittest.TestCase):
+    """ADR-0003 follow-up: the credentials file must not be plaintext at
+    rest. On Windows the secret-bearing fields are DPAPI-encrypted with a
+    "dpapi:" prefix; plaintext configs from prior versions still load and
+    are encrypted on their next save."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.config_path = os.path.join(self.tmp.name, "config.json")
+        patcher = mock.patch.object(server, "CONFIG_PATH", self.config_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _write_config_file(self, cfg):
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+
+    def _read_config_file(self):
+        with open(self.config_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    @unittest.skipUnless(sys.platform == "win32", "DPAPI is Windows-only")
+    def test_save_config_encrypts_secret_fields_on_disk(self):
+        cfg = dict(server.DEFAULT_CONFIG,
+                   spotify_client_id="client-id-123",
+                   spotify_client_secret="secret-456")
+        self.assertIsNone(server.save_config(cfg))
+        raw = self._read_config_file()
+        self.assertIn("dpapi:", raw)
+        self.assertNotIn("secret-456", raw)
+        self.assertNotIn("client-id-123", raw)
+
+    @unittest.skipUnless(sys.platform == "win32", "DPAPI is Windows-only")
+    def test_save_then_load_round_trips_secrets(self):
+        cfg = dict(server.DEFAULT_CONFIG,
+                   spotify_client_id="client-id-123",
+                   spotify_client_secret="secret-456",
+                   quality_kbps="320")
+        self.assertIsNone(server.save_config(cfg))
+        loaded = server.load_config()
+        self.assertEqual(loaded["spotify_client_id"], "client-id-123")
+        self.assertEqual(loaded["spotify_client_secret"], "secret-456")
+        self.assertEqual(loaded["quality_kbps"], "320")
+
+    @unittest.skipUnless(sys.platform == "win32", "DPAPI is Windows-only")
+    def test_plaintext_config_from_prior_version_still_loads(self):
+        self._write_config_file(dict(server.DEFAULT_CONFIG,
+                                     spotify_client_id="old-id",
+                                     spotify_client_secret="old-secret"))
+        loaded = server.load_config()
+        self.assertEqual(loaded["spotify_client_id"], "old-id")
+        self.assertEqual(loaded["spotify_client_secret"], "old-secret")
+
+    @unittest.skipUnless(sys.platform == "win32", "DPAPI is Windows-only")
+    def test_plaintext_config_is_protected_on_next_save(self):
+        self._write_config_file(dict(server.DEFAULT_CONFIG,
+                                     spotify_client_id="old-id",
+                                     spotify_client_secret="old-secret"))
+        self.assertIsNone(server.save_config(server.load_config()))
+        raw = self._read_config_file()
+        self.assertIn("dpapi:", raw)
+        self.assertNotIn("old-secret", raw)
+
+    @unittest.skipUnless(sys.platform == "win32", "DPAPI is Windows-only")
+    def test_undecryptable_field_is_kept_not_destroyed(self):
+        stored = "dpapi:not-a-real-blob"
+        self._write_config_file(dict(server.DEFAULT_CONFIG,
+                                     spotify_client_secret=stored))
+        loaded = server.load_config()
+        # A failed decrypt keeps the stored value so the next save
+        # re-persists it instead of silently blanking the credential.
+        self.assertEqual(loaded["spotify_client_secret"], stored)
+        self.assertIsNone(server.save_config(loaded))
+        self.assertEqual(server.load_config()["spotify_client_secret"], stored)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
+    def test_save_config_applies_chmod_600_on_posix(self):
+        cfg = dict(server.DEFAULT_CONFIG, spotify_client_secret="secret")
+        self.assertIsNone(server.save_config(cfg))
+        self.assertEqual(os.stat(self.config_path).st_mode & 0o777, 0o600)
 
 
 class TestHostHeaderAllowlist(unittest.TestCase):
