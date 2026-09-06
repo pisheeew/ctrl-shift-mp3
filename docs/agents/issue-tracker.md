@@ -2,6 +2,8 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+This repository is developed with the help of AI coding agents: the maintainer runs agent sessions whose skills read this file for the repo's tracker conventions. It is kept in the repo so that AI-assisted development is disclosed rather than implied, and so contributors can see exactly how issues and pull requests are handled.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
@@ -13,11 +15,11 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
-## Pull requests as a triage surface
+Design discussions happen in issues before code lands; pull requests link the issue that describes the problem or the agreed design, as [CONTRIBUTING.md](../../CONTRIBUTING.md) asks.
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+## Pull requests as a request surface
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+**PRs as a request surface: yes.** External pull requests are welcome and run through the same labels and states as issues, using the `gh pr` equivalents:
 
 - **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
 - **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
@@ -35,7 +37,7 @@ Run `gh issue view <number> --comments`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+Used by `/wayfinder`, a skill in the maintainer's local agent tooling (not a file in this repo): it plans large chunks of work as a shared map issue with child issues as tickets. The conventions below are recorded here because they are repo-level facts, visible to any contributor.
 
 - **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
 - **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
