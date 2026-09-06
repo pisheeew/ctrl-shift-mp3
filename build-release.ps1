@@ -17,7 +17,10 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     throw "Python is required to build the release."
 }
 
-python -m pip install --requirement requirements-release.txt
+# requirements-release.txt is a hash-pinned lockfile (pip-compile
+# --generate-hashes), so --require-hashes fails the build on any package
+# whose downloaded artifact does not match the audited checksum.
+python -m pip install --require-hashes --requirement requirements-release.txt
 if ($LASTEXITCODE -ne 0) { throw "Could not install release dependencies." }
 
 New-Item -ItemType Directory -Force -Path $vendorRoot | Out-Null

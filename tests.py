@@ -14,6 +14,7 @@ or:
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -467,8 +468,12 @@ class TestPackageRelease(unittest.TestCase):
         self.assertIn(("yt-dlp", "2026.8.19"), python_pins)
         self.assertIn(("rapidfuzz", "3.14.6"), python_pins)
         self.assertIn(("spotipy", "2.26.0"), python_pins)
-        # PyInstaller is build tooling, not something the bundle ships.
-        self.assertFalse(any(name == "pyinstaller" for name, _ in python_pins))
+        # PyInstaller and its build-only dependency tree are build tooling,
+        # not something the bundle ships, so they stay out of the pins (and
+        # NOTICES.txt) — mirrors _BUILD_ONLY_PACKAGES in package_release.py.
+        build_only = {"pyinstaller", "altgraph", "packaging", "pefile",
+                      "pyinstaller-hooks-contrib", "pywin32-ctypes", "setuptools"}
+        self.assertFalse(any(name in build_only for name, _ in python_pins))
         self.assertEqual(ffmpeg_pins["version"], "9.0.1")
         self.assertEqual(ffmpeg_pins["sha256"],
                          "a8ebbaf7a99185f5abc3a2d3a657521c38d7966f06b70468d7ab29a67fe8654f")
@@ -477,6 +482,68 @@ class TestPackageRelease(unittest.TestCase):
             "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
             "autobuild-2026-09-05-13-10/ffmpeg-n9.0.1-26-g5c8e7e2433-win64-gpl-9.0.zip",
         )
+
+    # The lockfile tests re-derive the pins independently of package_release
+    # (no shared parser) so a parsing bug there cannot hide a lockfile gap.
+    # requirements-release.txt is a pip-compile --generate-hashes lockfile:
+    # `name==version \` followed by indented `--hash=sha256:...` lines.
+    _LOCKFILE_PIN_RE = re.compile(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[^\s#]+)")
+
+    @staticmethod
+    def _canonical_name(name):
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    @classmethod
+    def _parse_hashed_lockfile(cls):
+        """Return ({canonical name: version}, {names carrying a sha256
+        hash}) for every pinned package in requirements-release.txt."""
+        versions = {}
+        hashed = set()
+        current = None
+        for line in (Path(__file__).resolve().parent / "requirements-release.txt") \
+                .read_text(encoding="utf-8").splitlines():
+            pin = cls._LOCKFILE_PIN_RE.match(line)
+            if pin:
+                current = cls._canonical_name(pin.group("name"))
+                versions[current] = pin.group("version")
+            elif current is not None and "--hash=sha256:" in line:
+                hashed.add(current)
+        return versions, hashed
+
+    def test_release_lockfile_hashes_every_entry(self):
+        """The transitive closure is hash-pinned: any package added without
+        a recorded sha256 (e.g. a hand-edited or half-regenerated lockfile)
+        fails here, and --require-hashes would fail the install anyway."""
+        versions, hashed = self._parse_hashed_lockfile()
+        # The five top-level pins resolve to a 20+-package closure; a much
+        # smaller lockfile means the closure was not fully generated.
+        self.assertGreaterEqual(len(versions), 20,
+                                "the lockfile should pin the full transitive closure")
+        unhashed = sorted(set(versions) - hashed)
+        self.assertEqual(unhashed, [],
+                         "lockfile entries without a --hash=sha256 value")
+
+    def test_release_lockfile_covers_the_top_level_pins(self):
+        """Every top-level pin in requirements-release.in must appear at
+        exactly that version in the lockfile, so bumping a version in one
+        file without regenerating the other fails the suite."""
+        versions, _ = self._parse_hashed_lockfile()
+        in_text = (Path(__file__).resolve().parent / "requirements-release.in") \
+            .read_text(encoding="utf-8")
+        for line in in_text.splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            match = self._LOCKFILE_PIN_RE.match(line)
+            self.assertIsNotNone(match, f"unparseable pin in requirements-release.in: {line}")
+            name = self._canonical_name(match.group("name"))
+            self.assertIn(name, versions,
+                          f"{name} is a top-level pin but is missing from the lockfile")
+            self.assertEqual(
+                versions[name], match.group("version"),
+                f"{name} was bumped in requirements-release.in but the lockfile "
+                "still pins another version — regenerate requirements-release.txt.",
+            )
 
     def test_assemble_release_builds_versioned_zip_with_notices_inside(self):
         with tempfile.TemporaryDirectory() as dist:

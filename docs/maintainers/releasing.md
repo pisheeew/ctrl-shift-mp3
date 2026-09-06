@@ -87,7 +87,7 @@ Every release input is pinned so the same tag rebuilds the same bundle:
 | Input            | Where it lives                                                    |
 | ---------------- | ----------------------------------------------------------------- |
 | Python version   | `.github/workflows/release.yml` (`python-version: "3.14.3"`)      |
-| Python packages  | `requirements-release.txt` (exact pins, includes PyInstaller)     |
+| Python packages  | `requirements-release.txt` (hash-pinned lockfile, includes PyInstaller; top-level pins in `requirements-release.in`) |
 | FFmpeg build     | `build-release.ps1` (`$ffmpegVersion`, `$ffmpegTag`, `$ffmpegArchiveName`, `$ffmpegSha256`) |
 | GPL license text | `docs/licenses/GPL-2.0.txt` (retained verbatim inside `NOTICES.txt`) |
 
@@ -120,10 +120,34 @@ byte-reproducible.
 
 ## Updating pinned dependencies deliberately
 
-**Python packages.** Edit `requirements-release.txt`. The pin assertions in
-`tests.py` (`TestPackageRelease`) will fail until updated — update them in the
-same change. Remember the runtime pins and the PyInstaller pin serve different
-purposes: only runtime packages are recorded in `NOTICES.txt`.
+**Python packages.** `requirements-release.txt` is a hash-pinned lockfile:
+every package in the transitive closure carries exact `--hash=sha256:...`
+values, and both the Release workflow and `build-release.ps1` install it with
+`pip install --require-hashes`, so a compromised or typo-squatted PyPI upload
+cannot flow into the bundle (see ADR-0002). To bump a dependency, regenerate
+the lockfile — never hand-edit its pins or hashes:
+
+1. Edit the top-level pin in `requirements-release.in` (the only file with
+   hand-written versions; everything else in the lockfile is generated).
+2. From the pinned Python (3.14.3) run:
+
+   ```bash
+   python -m pip install --upgrade pip-tools
+   python -m piptools compile --generate-hashes --strip-extras --allow-unsafe \
+       --output-file requirements-release.txt requirements-release.in
+   ```
+
+3. Commit both files in the same change. The pin assertions in `tests.py`
+   (`TestPackageRelease`) fail if the lockfile and `.in` disagree on a
+   version, or if any lockfile entry is missing its sha256 hash.
+
+`--allow-unsafe` matters: PyInstaller's `setuptools` dependency would
+otherwise be left unpinned, and `pip install --require-hashes` rejects a
+requirements file containing an unpinned package. The hashes pip-compile
+records cover every file on each PyPI release (all platforms plus the
+sdist), so the same lockfile serves the Windows release build and the Linux
+CI install. Remember the runtime pins and the PyInstaller pin serve
+different purposes: only runtime packages are recorded in `NOTICES.txt`.
 
 **FFmpeg.** Choose the new BtbN win64 GPL build, then update the four pins in
 `build-release.ps1` together (`$ffmpegVersion`, `$ffmpegTag`,

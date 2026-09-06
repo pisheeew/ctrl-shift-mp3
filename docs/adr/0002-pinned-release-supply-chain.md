@@ -9,4 +9,6 @@ Every release input is pinned — the exact Python patch version, exact pip requ
 
 ## Consequences
 
-- Transitive pip dependencies are still resolved (not hash-pinned) at build time; tightening that to `--require-hashes` is a recorded follow-up, not a change of direction.
+- The full transitive pip dependency closure is hash-pinned in `requirements-release.txt` (generated with `pip-compile --generate-hashes`) and installed with `pip install --require-hashes` by the Release workflow, CI, and `build-release.ps1`; a changed or compromised PyPI artifact now fails the install instead of shipping (added as the recorded follow-up below was completed).
+- Dependency bumps mean regenerating the lockfile rather than editing pins by hand; the refresh procedure lives in `docs/maintainers/releasing.md`.
+- Dev installs (`requirements.txt`) remain deliberately unpinned; the discipline applies to the release supply chain only.

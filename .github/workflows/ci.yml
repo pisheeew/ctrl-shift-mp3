@@ -35,9 +35,11 @@ jobs:
           python-version: "3.14.3"
 
       - name: Install the pinned release dependencies
-        # The same pins the release workflow uses: the notices test asserts
-        # the generated third-party notices describe these exact versions.
-        run: python -m pip install --requirement requirements-release.txt
+        # The same hash-pinned lockfile the release workflow installs: this
+        # both exercises the cross-platform hashes on Linux and fails fast if
+        # a lockfile entry loses its sha256. The notices test asserts the
+        # generated third-party notices describe these exact versions.
+        run: python -m pip install --require-hashes --requirement requirements-release.txt
 
       - name: Run the unit test suite
         run: python -m unittest tests.py --verbose

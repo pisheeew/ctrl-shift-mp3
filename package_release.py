@@ -46,7 +46,14 @@ REPO_ROOT = Path(__file__).resolve().parent
 _BUNDLE_DIR_NAME = "ctrl-shift-mp3"
 _TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 _REQUIREMENT_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[^\s#]+)")
-_BUILD_ONLY_PACKAGES = {"pyinstaller"}
+# PyInstaller and the dependencies reachable only from it in the
+# requirements-release.txt closure: build tooling that never ships in the
+# bundle, so it stays out of NOTICES.txt. Revisit when the closure changes;
+# a runtime package must never land here.
+_BUILD_ONLY_PACKAGES = {
+    "pyinstaller", "altgraph", "packaging", "pefile",
+    "pyinstaller-hooks-contrib", "pywin32-ctypes", "setuptools",
+}
 _LICENSE_FILE_RE = re.compile(r"^(licen[cs]e|copying|notice)", re.IGNORECASE)
 _LICENSE_FILE_LIMIT = 200_000
 
