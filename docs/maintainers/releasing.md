@@ -66,6 +66,17 @@ Publishing is always a manual step. The workflow creates the release as a
      exactly the assets listed in `dist/release-assets.txt`.
 4. Review the draft (checklist below), then publish it from the GitHub UI.
 
+### Re-run a failed release run
+
+If a tagged run fails after the tag is pushed (flaky smoke test, transient
+FFmpeg fetch), retry it manually instead of moving or re-pushing the tag: run
+the **Release** workflow from the GitHub UI (or
+`gh workflow run release.yml --ref main -f tag=v1.2.3`), passing the same tag
+as the `tag` input. The run checks out and releases that tag exactly as a tag
+push would; the input is pre-filled with the triggering ref if left empty, so
+an accidental empty dispatch on a branch fails fast at the version check
+rather than releasing the wrong ref.
+
 ## Review checklist before publishing a draft
 
 - The workflow run is fully green — in particular the smoke-test step passed
