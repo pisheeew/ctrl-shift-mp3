@@ -35,3 +35,6 @@ Thumbs.db
 *.mp3
 *.m4a
 *.webm
+
+# --- Coding-agent working directory ---
+.zcode/
