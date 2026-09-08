@@ -180,7 +180,13 @@ run from source or from a packaged release:
   account), so the file is unreadable to other local users and to copies taken
   off the machine; configs written by older versions are plaintext and are
   encrypted the next time you save settings. The app masks the saved secret in
-  the browser and does not send it back on page load.
+  the browser and does not send it back on page load. All state files are
+  written through a temporary file that is atomically moved into place, so an
+  interrupted save can never corrupt the previous contents. If the settings
+  file cannot be read, it is renamed aside as
+  `~/.playlist_downloader_config.json.corrupt` (numbered for repeated
+  occurrences) instead of being overwritten, so you can inspect or recover it;
+  delete it once you no longer need it.
 - `~/.playlist_downloader_session.json` stores the last queue and track state.
 - `~/.playlist_downloader_match_cache.json` caches YouTube matches.
 - `~/.playlist_downloader.log` stores the run log.

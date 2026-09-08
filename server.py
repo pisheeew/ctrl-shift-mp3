@@ -103,19 +103,39 @@ def load_config() -> dict:
                 cfg.update(json.load(f))
         except Exception:
             log.exception("Failed to load config from %s", CONFIG_PATH)
+            # The file exists but cannot be parsed, so leaving it in place
+            # would let the next save silently destroy whatever is in it --
+            # possibly a recoverable Credential. Rename it aside first and
+            # load defaults; the quarantine copy keeps the contents readable.
+            _quarantine_config(CONFIG_PATH)
     return _restore_config_secrets(cfg)
+
+
+def _quarantine_config(path: str) -> Optional[str]:
+    """Rename an unparseable config aside so the next save cannot destroy
+    its contents. Never overwrites an earlier quarantine copy (numbered
+    suffixes instead) and never raises: returns the quarantine path, or
+    None if the rename itself failed."""
+    base = path + ".corrupt"
+    target = base
+    n = 1
+    while os.path.exists(target):
+        target = f"{base}.{n}"
+        n += 1
+    try:
+        os.replace(path, target)
+        log.warning("Quarantined unparseable config %s as %s; loading defaults",
+                    path, target)
+        return target
+    except OSError:
+        log.exception("Failed to quarantine unparseable config %s", path)
+        return None
 
 
 def save_config(cfg: dict) -> Optional[str]:
     try:
         protected = _protect_config_secrets(cfg)
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(protected, f, indent=2)
-        if os.name == "posix":
-            try:
-                os.chmod(CONFIG_PATH, 0o600)
-            except OSError:
-                log.exception("Failed to restrict permissions on %s", CONFIG_PATH)
+        engine.write_json_atomically(protected, CONFIG_PATH, mode=0o600, indent=2)
         return None
     except Exception:
         # SEC-007: log full detail (including the path) server-side only;
@@ -195,6 +215,15 @@ def _restore_config_secrets(cfg: dict) -> dict:
     for field in SECRET_CONFIG_FIELDS:
         value = restored.get(field)
         if isinstance(value, str) and value.startswith(_DPAPI_PREFIX):
+            if _crypt32 is None:
+                # Same platform guard as the encrypt path: outside Windows
+                # there is no DPAPI to attempt, so keep the stored value
+                # exactly as ADR-0003 requires -- the next save on a
+                # Windows machine re-encrypts it. A synced config carrying
+                # a "dpapi:" prefix must neither crash nor wedge restore.
+                log.info("Credential decryption unavailable on this platform; "
+                         "keeping %s in %s as stored", field, CONFIG_PATH)
+                continue
             try:
                 restored[field] = _decrypt_config_value(value)
             except Exception:
@@ -210,8 +239,7 @@ def _restore_config_secrets(cfg: dict) -> dict:
 def save_session_cache(tracks: list[Track], queue_urls: list[str]) -> None:
     try:
         payload = {"tracks": [engine.track_to_dict(t) for t in tracks], "queue_urls": queue_urls}
-        with open(CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(payload, f)
+        engine.write_json_atomically(payload, CACHE_PATH)
     except Exception:
         log.exception("Failed to save session cache to %s", CACHE_PATH)
 

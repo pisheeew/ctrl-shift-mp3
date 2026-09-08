@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -354,10 +355,41 @@ def load_match_cache(path: str) -> dict:
         return {}
 
 
+def write_json_atomically(payload, path: str, *, mode: Optional[int] = None,
+                          **dump_kwargs) -> None:
+    """Serialize `payload` as JSON and move it into place atomically.
+
+    The bytes land in a temp file in the destination's own directory first,
+    then os.replace() swaps it over the real file in one atomic step, so a
+    crash, power loss, or disk-full mid-write can never truncate or destroy
+    the previous contents -- the destination either holds the old file or
+    the complete new one, nothing in between. On POSIX an optional `mode`
+    is applied to the temp file *before* the replace, so the destination is
+    never briefly visible at a wider permission than intended. Any failure
+    removes the temp file and re-raises; the caller decides what to log."""
+    directory = os.path.dirname(os.path.abspath(path))
+    fd, tmp_path = tempfile.mkstemp(dir=directory,
+                                    prefix=os.path.basename(path) + ".",
+                                    suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f, **dump_kwargs)
+            f.flush()
+            os.fsync(f.fileno())
+        if mode is not None and os.name == "posix":
+            os.chmod(tmp_path, mode)
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def save_match_cache(cache: dict, path: str) -> None:
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cache, f)
+        write_json_atomically(cache, path)
     except Exception:
         log.exception("Failed to save match cache to %s", path)
 

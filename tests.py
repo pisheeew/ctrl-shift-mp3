@@ -389,6 +389,141 @@ class TestCredentialFileProtection(unittest.TestCase):
         self.assertEqual(os.stat(self.config_path).st_mode & 0o777, 0o600)
 
 
+class TestCrashSafePersistence(unittest.TestCase):
+    """All three persistent state files (settings, session state, match
+    cache) are written via temp file + atomic replace, so a crash mid-save
+    can never truncate or destroy the previous contents. An unparseable
+    settings file is quarantined (renamed aside) before defaults load, so
+    the next save cannot silently destroy a potentially recoverable
+    Credential. The credential restore path carries the same no-DPAPI
+    platform guard as the encrypt path."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.config_path = os.path.join(self.tmp.name, "config.json")
+        self.cache_path = os.path.join(self.tmp.name, "session.json")
+        self.match_cache_path = os.path.join(self.tmp.name, "match_cache.json")
+        for attr, path in (("CONFIG_PATH", self.config_path),
+                           ("CACHE_PATH", self.cache_path),
+                           ("MATCH_CACHE_PATH", self.match_cache_path)):
+            patcher = mock.patch.object(server, attr, path)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _mid_write_json_dump(obj, f, **kwargs):
+        # Simulate a crash/disk-full partway through the write: some bytes
+        # hit the file, then the failure happens.
+        f.write('{"partial":')
+        raise OSError("simulated disk-full mid-write")
+
+    def _read_bytes(self, path):
+        with open(path, "rb") as f:
+            return f.read()
+
+    def _assert_no_temp_files_left(self):
+        leftovers = [n for n in os.listdir(self.tmp.name) if n.endswith(".tmp")]
+        self.assertEqual(leftovers, [])
+
+    def test_mid_write_failure_leaves_previous_config_byte_identical(self):
+        self.assertIsNone(server.save_config(dict(server.DEFAULT_CONFIG,
+                                                  quality_kbps="320")))
+        before = self._read_bytes(self.config_path)
+        with mock.patch.object(server.json, "dump",
+                               side_effect=self._mid_write_json_dump):
+            error = server.save_config(dict(server.DEFAULT_CONFIG,
+                                            quality_kbps="128"))
+        self.assertIsNotNone(error)
+        self.assertEqual(self._read_bytes(self.config_path), before)
+        self._assert_no_temp_files_left()
+
+    def test_mid_write_failure_leaves_previous_session_cache_byte_identical(self):
+        tracks = [engine.Track(index=0, title="Song", artist="Artist")]
+        server.save_session_cache(tracks, ["https://example.com/watch?v=1"])
+        before = self._read_bytes(self.cache_path)
+        with mock.patch.object(server.json, "dump",
+                               side_effect=self._mid_write_json_dump):
+            server.save_session_cache([engine.Track(index=1, title="Other")], [])
+        self.assertEqual(self._read_bytes(self.cache_path), before)
+        self._assert_no_temp_files_left()
+
+    def test_mid_write_failure_leaves_previous_match_cache_byte_identical(self):
+        engine.save_match_cache({"key::one": {"url": "https://example.com/1"}},
+                                self.match_cache_path)
+        before = self._read_bytes(self.match_cache_path)
+        with mock.patch.object(engine.json, "dump",
+                               side_effect=self._mid_write_json_dump):
+            engine.save_match_cache({"key::two": {"url": "https://example.com/2"}},
+                                    self.match_cache_path)
+        self.assertEqual(self._read_bytes(self.match_cache_path), before)
+        self._assert_no_temp_files_left()
+
+    def test_successful_saves_leave_no_temp_files_behind(self):
+        server.save_config(dict(server.DEFAULT_CONFIG))
+        server.save_session_cache([], [])
+        engine.save_match_cache({}, self.match_cache_path)
+        self._assert_no_temp_files_left()
+        server.load_config()
+        loaded_tracks, loaded_queue = server.load_session_cache()
+        self.assertEqual((loaded_tracks, loaded_queue), ([], []))
+        self.assertEqual(engine.load_match_cache(self.match_cache_path), {})
+
+    def _client(self):
+        # App-factory/file seam (same as TestHostHeaderAllowlist): the app
+        # factory builds a Core, and Core.__init__ loads the config, so
+        # quarantine and default-loading are observable through /api/init.
+        with open(os.path.join(self.tmp.name, "index.html"), "w", encoding="utf-8") as page:
+            page.write("packaged frontend")
+        return server.create_app(frontend_dir=self.tmp.name).test_client()
+
+    def test_unparseable_config_is_quarantined_and_defaults_load(self):
+        raw = '{"output_dir": "C:\\\\music", "broken": '
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            f.write(raw)
+        client = self._client()
+        response = client.get("/api/init")
+        try:
+            state = response.get_json()
+        finally:
+            response.close()
+        self.assertEqual(state["config"], dict(server.DEFAULT_CONFIG))
+        self.assertFalse(os.path.exists(self.config_path),
+                         "the corrupt file must not stay in place to be clobbered")
+        quarantine_path = self.config_path + ".corrupt"
+        self.assertTrue(os.path.exists(quarantine_path))
+        self.assertEqual(self._read_bytes(quarantine_path).decode("utf-8"), raw)
+
+    def test_quarantine_never_overwrites_an_existing_copy(self):
+        first_raw = "{ first corrupt config"
+        second_raw = "{ second corrupt config"
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            f.write(first_raw)
+        self._client()
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            f.write(second_raw)
+        self._client()
+        with open(self.config_path + ".corrupt", "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), first_raw)
+        with open(self.config_path + ".corrupt.1", "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), second_raw)
+
+    def test_restore_keeps_encrypted_value_when_dpapi_is_unavailable(self):
+        # _crypt32 is None exactly on non-Windows platforms; patching it here
+        # exercises the same platform guard the encrypt path has, so a
+        # synced config carrying a "dpapi:" prefix neither crashes nor
+        # wedges credential restore on POSIX.
+        stored = "dpapi:not-a-real-blob"
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            json.dump(dict(server.DEFAULT_CONFIG, spotify_client_secret=stored), f)
+        with mock.patch.object(server, "_crypt32", None):
+            with mock.patch.object(server.log, "exception") as failure:
+                loaded = server.load_config()
+        self.assertEqual(loaded["spotify_client_secret"], stored)
+        # A platform guard is a clean, expected branch, not an error path.
+        failure.assert_not_called()
+
+
 class TestHostHeaderAllowlist(unittest.TestCase):
     """ADR-0001: the browser-facing API must only answer requests whose
     Host header is this machine, so a DNS-rebinding page cannot reach the
