@@ -4,11 +4,13 @@ How AI coding agents working in this repo should consume its domain documentatio
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root: the domain glossary — Playlist, Track, Match, Download, Run, Credential, Access token — including the synonyms each term avoids.
+- **`CONTEXT.md`** at the repo root: the domain glossary — Playlist, Track, Match, Match score, Download, Run, Credential, Access token — including the synonyms each term avoids.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in. The current set:
   - [`0001-local-only-unauthenticated-server.md`](../adr/0001-local-only-unauthenticated-server.md)
   - [`0002-pinned-release-supply-chain.md`](../adr/0002-pinned-release-supply-chain.md)
   - [`0003-credential-and-token-storage.md`](../adr/0003-credential-and-token-storage.md)
+  - [`0004-public-personal-project-posture.md`](../adr/0004-public-personal-project-posture.md)
+  - [`0005-match-score-semantics.md`](../adr/0005-match-score-semantics.md)
 
 New glossary terms and ADRs are added lazily, when a term or decision actually gets resolved in the maintainer's domain-modeling workflow. Don't create them upfront on speculation, and don't flag the docs' brevity.
 

@@ -3,6 +3,7 @@
 - **Playlist**: an ordered source of track metadata, supplied by Spotify or YouTube.
 - **Track**: one playable item from a playlist, carrying title, artist, duration, match state, and download state.
 - **Match**: the selected YouTube candidate for a track, including confidence and fallback candidates.
+- **Match score**: a 0–100 confidence the app assigns to a track's Match; scorer-ranked matches peak below 100. _Avoid_: rating, quality.
 - **Download**: the process that turns a matched track into a tagged MP3 in the chosen output folder.
 - **Run**: one scan, merged playlist scan, download, or retry operation and its emitted progress and status.
 - **Credential**: the Spotify API credentials (client ID and secret) the user supplies in Settings; long-lived, stored in the user profile, required only for Spotify scans. _Avoid_: API key, login.
